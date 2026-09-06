@@ -78,6 +78,10 @@ class Overlay:
         radius, fill = (6, -1) if closed else (4, 2)
         for p in pts:
             cv2.circle(image, p, radius, color, fill, cv2.LINE_AA)
+        # Side plus what the recognizer thinks the hand is doing, for calibration at a glance.
+        tag = hand.side[0].upper() + (f" {hand.gesture.replace('_', ' ').lower()}" if hand.gesture != "None" else "")
+        wx, wy = pts[0]
+        cv2.putText(image, tag, (wx + 8, wy + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
 
     def _draw_velocity_arrow(
         self, image: np.ndarray, side: str, px: float, py: float, vx: float, vy: float, w: int, h: int

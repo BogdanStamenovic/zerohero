@@ -225,7 +225,7 @@ def _render_canvas(
         for p in pts:
             _plot_point(bits, cell_char, cell_color, canvas_w, canvas_h, p[0], p[1], cname, ascii_mode, "o")
         if pts:
-            label = "L" if hand.side == "left" else "R"
+            label = ("L" if hand.side == "left" else "R") + ("!" if hand.gesture == "Closed_Fist" else "")
             _plot_label(cell_char, cell_color, canvas_w, canvas_h, pts[0][0], pts[0][1], ascii_mode, label, cname)
 
     for side, track in state.tracks.items():
