@@ -41,6 +41,10 @@ class HandTrack:
         self.velocity: tuple[float, float] = (0.0, 0.0)
         self.speed = 0.0
         self.closed_score = 0.0
+        # Fingertip movement relative to the palm, hand widths/s, EMA: the
+        # "fingers wiggling" signal, independent of where the hand travels.
+        self.finger_activity = 0.0
+        self._tips: tuple[tuple[float, float], ...] = ()
         self.last_t: float | None = None
         self._smoothed_width = 0.0
 
@@ -70,6 +74,16 @@ class HandTrack:
             self.last_t = t
 
         self.speed = math.hypot(*self.velocity)
+        if dt is not None and _MIN_DT <= dt <= _MAX_DT and self._tips and len(self._tips) == len(features.tips):
+            pairs = zip(self._tips, features.tips, strict=True)
+            moved = sum(math.hypot(a[0] - b[0], a[1] - b[1]) for a, b in pairs) / len(self._tips)
+            # Heavier smoothing than the palm velocity: five noisy tips, and
+            # the wiggle only needs to be right within ~100 ms, not per frame.
+            beta = 0.6
+            self.finger_activity = beta * self.finger_activity + (1 - beta) * moved / dt
+        else:
+            self.finger_activity = 0.0
+        self._tips = features.tips
         self.palm = features.palm
         self.width = features.width
         self.closed_score = features.closed_score
@@ -79,6 +93,8 @@ class HandTrack:
         if self.last_t is not None and (t - self.last_t) > self.cfg.lost_after:
             self.velocity = (0.0, 0.0)
             self.speed = 0.0
+            self.finger_activity = 0.0
+            self._tips = ()
             self._smoothed_width = 0.0
             self.last_t = None
         self.present = False

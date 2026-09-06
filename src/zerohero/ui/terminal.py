@@ -53,6 +53,7 @@ _TRUECOLOR: dict[str, tuple[int, int, int]] = {
     "left": (0, 230, 230),  # cyan
     "right": (255, 140, 0),  # orange
     "closed": (230, 0, 230),  # magenta -- overrides side color while fisted
+    "limiter": (90, 160, 200),  # the keyboard surface line in piano mode
 }
 
 HUD_LINES = 3
@@ -227,6 +228,13 @@ def _render_canvas(
         if pts:
             label = ("L" if hand.side == "left" else "R") + ("!" if hand.gesture == "Closed_Fist" else "")
             _plot_label(cell_char, cell_color, canvas_w, canvas_h, pts[0][0], pts[0][1], ascii_mode, label, cname)
+
+    if state.limiter is not None:
+        # The keyboard surface: a dotted line across the canvas at the limiter height.
+        ly = to_dot(0.0, state.limiter)[1]
+        for lx in range(0, dot_w, 3):
+            px = x0 + lx * dw / dot_w
+            _plot_point(bits, cell_char, cell_color, canvas_w, canvas_h, px, ly, "limiter", ascii_mode, "-")
 
     for side, track in state.tracks.items():
         px, py, vx, vy, closed = track

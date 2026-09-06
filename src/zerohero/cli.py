@@ -142,7 +142,7 @@ def cmd_chords(a: argparse.Namespace) -> int:
             sched.cut(CH_GUITAR)
             sched.play(guitar.strum(c, "down", 0.5, cfg.music))
             time.sleep(0.9)
-            sched.play(piano.grip_chord(c, 0.55, 0.5, 0.4, False, cfg.music, cfg.piano))
+            sched.play(piano.chord_hit(c, 0.55, 0.5, 0.4, cfg.music, cfg.piano))
             time.sleep(1.1)
         time.sleep(1.0)
     finally:

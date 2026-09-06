@@ -1,5 +1,5 @@
 from zerohero.config import CH_PIANO, MusicConfig, PianoConfig
-from zerohero.music import piano
+from zerohero.music import piano, theory
 from zerohero.music.theory import parse_chord
 
 CFG = MusicConfig()
@@ -39,22 +39,18 @@ def test_voicing_at_slash_bass_on_bottom():
     assert notes[0] % 12 == 7
 
 
-def test_grip_chord_position_intensity_and_downward_weight():
+def test_chord_hit_position_intensity_and_weight():
     c = parse_chord("F")
-    low = piano.grip_chord(c, 0.1, 0.5, 0.2, False, CFG, PCFG)
-    high = piano.grip_chord(c, 0.9, 0.5, 0.2, False, CFG, PCFG)
+    low = piano.chord_hit(c, 0.1, 0.5, 0.2, CFG, PCFG)
+    high = piano.chord_hit(c, 0.9, 0.5, 0.2, CFG, PCFG)
     assert max(e.note for e in low) < min(e.note for e in high)
     assert all(e.channel == CH_PIANO for e in low)
-    soft = piano.grip_chord(c, 0.5, 0.1, 0.0, False, CFG, PCFG)
-    hard = piano.grip_chord(c, 0.5, 1.0, 1.0, False, CFG, PCFG)
+    soft = piano.chord_hit(c, 0.5, 0.1, 0.0, CFG, PCFG)
+    hard = piano.chord_hit(c, 0.5, 1.0, 1.0, CFG, PCFG)
     assert soft[0].velocity < hard[0].velocity
-    down = piano.grip_chord(c, 0.5, 0.5, 0.2, True, CFG, PCFG)
-    flat = piano.grip_chord(c, 0.5, 0.5, 0.2, False, CFG, PCFG)
-    assert min(e.note for e in down) == min(e.note for e in flat) - 12
-    assert down[0].velocity > flat[0].velocity
-    # rolled, not simultaneous, but tight
-    assert 0 < flat[-1].offset < 0.06
-    assert all(e.duration > 2.0 for e in flat)  # held; the mode releases early
+    assert min(e.note for e in hard) == min(e.note for e in soft) - 12  # bass weight when leaning in
+    assert 0 < soft[-1].offset < 0.06  # rolled, not simultaneous
+    assert all(e.duration == CFG.piano_sustain for e in soft)
 
 
 def test_lattice_is_ascending_chord_tones_over_the_span():
@@ -82,28 +78,23 @@ def test_sweep_note_speed_sets_velocity_and_shortens_duration():
     assert piano.sweep_note(notes, 999, 1.0, 0.0, CFG, PCFG).note == notes[-1]  # clamped
 
 
-def test_passage_runs_through_scale_in_direction():
+def test_zigzag_stays_in_scale_near_the_hand_and_drifts():
     c = parse_chord("Am")
-    up = piano.passage(c, 0.5, "up", 0.5, 0.3, False, CFG, PCFG)
-    down = piano.passage(c, 0.5, "down", 0.5, 0.3, False, CFG, PCFG)
-    scale = set(__import__("zerohero.music.theory", fromlist=["chord_scale"]).chord_scale(c))
-    assert [e.note for e in up] == sorted(e.note for e in up)
-    assert [e.note for e in down] == sorted((e.note for e in down), reverse=True)
-    assert all(e.note % 12 in scale for e in up + down)
-    assert all(e.note > piano.key_at(0.5, PCFG) for e in up)
-    offsets = [e.offset for e in up]
-    assert offsets == sorted(offsets) and offsets[0] == 0.0
-    # crescendo
-    assert up[-1].velocity >= up[0].velocity
-
-
-def test_passage_longer_and_faster_with_intensity_and_zigzag_when_erratic():
-    c = parse_chord("D")
-    gentle = piano.passage(c, 0.4, "up", 0.1, 0.0, False, CFG, PCFG)
-    wild = piano.passage(c, 0.4, "up", 1.0, 1.0, False, CFG, PCFG)
-    assert len(wild) > len(gentle)
-    assert wild[1].offset < gentle[1].offset
-    zig = piano.passage(c, 0.4, "up", 0.8, 0.5, True, CFG, PCFG)
-    notes = [e.note for e in zig]
-    assert notes != sorted(notes)  # wobbles
-    assert notes[-1] > notes[0]  # but still heads up
+    scale = set(theory.chord_scale(c))
+    z = piano.Zigzag(seed=3)
+    notes = [z.next(c, 0.5, "none", 0.5, 0.3, CFG, PCFG) for _ in range(30)]
+    centre = piano.key_at(0.5, PCFG)
+    assert all(e.note % 12 in scale for e in notes)
+    assert all(abs(e.note - centre) <= 16 for e in notes)
+    pitches = [e.note for e in notes]
+    assert pitches != sorted(pitches) and pitches != sorted(pitches, reverse=True)  # zigzags
+    assert all(e.channel == CH_PIANO and 0 < e.velocity <= 127 for e in notes)
+    # drifting right over many notes ends higher than drifting left
+    zr, zl = piano.Zigzag(seed=5), piano.Zigzag(seed=5)
+    right = [zr.next(c, 0.5, "right", 0.5, 0.3, CFG, PCFG).note for _ in range(40)]
+    left = [zl.next(c, 0.5, "left", 0.5, 0.3, CFG, PCFG).note for _ in range(40)]
+    assert sum(right[-10:]) > sum(left[-10:])
+    # livelier fingers play harder
+    quiet = piano.Zigzag(seed=1).next(c, 0.5, "none", 0.0, 0.0, CFG, PCFG).velocity
+    lively = piano.Zigzag(seed=1).next(c, 0.5, "none", 1.0, 0.0, CFG, PCFG).velocity
+    assert lively > quiet

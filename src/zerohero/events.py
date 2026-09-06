@@ -123,46 +123,38 @@ GestureEvent = Strum | FistClose | FistOpen | Beat
 
 
 @dataclass(frozen=True, slots=True)
-class GripHit:
-    """Sharp movement onset while the hand is gripped, as if holding a chord."""
+class ChordHit:
+    """Open hand hit downward: a chord at the hand's keyboard position."""
 
     t: float
     hand: Side
-    x: float  # palm x in 0..1, where on the keyboard
+    x: float  # palm x in 0..1
     intensity: float  # 0..1
-    downward: bool  # the hit went down: add weight in the bass
-
-
-@dataclass(frozen=True, slots=True)
-class GripRelease:
-    t: float
-    hand: Side
 
 
 @dataclass(frozen=True, slots=True)
 class SweepStep:
-    """An open hand moving sideways crossed the next keyboard slot."""
+    """Below the limiter, a sideways-moving hand crossed the next keyboard slot."""
 
     t: float
     hand: Side
-    slot: int  # index into the chord-tone lattice across the keyboard
+    slot: int
     direction: Literal["left", "right"]
     speed: float  # hand widths per second at the crossing
 
 
 @dataclass(frozen=True, slots=True)
-class Passage:
-    """Open hand hit up or down, or erratic motion: a run through the chord scale."""
+class WiggleNote:
+    """Fingers wiggling: one zigzag note is due."""
 
     t: float
     hand: Side
     x: float
-    direction: Literal["up", "down"]
-    intensity: float
-    erratic: bool
+    drift: Literal["left", "right", "none"]  # where the hand itself is heading
+    activity: float  # 0..1
 
 
-PianistEvent = GripHit | GripRelease | SweepStep | Passage
+PianistEvent = ChordHit | SweepStep | WiggleNote
 
 
 # ---- music ---------------------------------------------------------------

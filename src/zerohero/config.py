@@ -63,30 +63,31 @@ class GestureConfig:
 class PianoConfig:
     """Piano mode: the hand is the pianist. Speeds in hand widths per second."""
 
-    # Grip = fingers curled as if holding a chord (closed_score hysteresis).
-    grip_on: float = 0.55
-    grip_off: float = 0.35
-    # A hit is a sharp movement onset (any direction) while gripped, or a
-    # vertical/erratic one with an open hand (passage).
-    # Measured live: deliberate hits peak at 6-20 hand widths/s, casual moves at 1-3.
+    # The limiter is the keyboard surface: a horizontal line at this fraction
+    # of the frame height (y grows downward). Above it the hand only travels;
+    # below it, sideways movement sweeps the keys.
+    limiter_y: float = 0.55
+    # An open hand hitting downward is a chord. Measured live: deliberate hits
+    # peak at 6-20 hand widths/s, casual moves at 1-3.
     hit_speed_on: float = 4.0
     hit_speed_off: float = 1.5
     hit_speed_full: float = 14.0
-    hit_refractory: float = 0.15
-    # An open-hand passage needs a clearly faster predicted peak than a grip hit,
-    # because an open hand moving around is the normal state between gestures.
-    passage_speed_on: float = 6.0
-    # Sweep: open hand moving sideways fires a note per lattice slot crossed.
+    hit_refractory: float = 0.2
+    # Sweep: below the limiter, sideways speed above this fires a note per
+    # lattice slot crossed.
     sweep_speed_on: float = 1.5
-    sweep_min_gap: float = 0.03  # never two sweep notes closer than this
-    # Erratic = this many horizontal direction reversals inside the window.
-    erratic_window: float = 0.5
-    erratic_reversals: int = 2
+    sweep_min_gap: float = 0.03
+    # Wiggle: fingertips moving relative to the palm (hand widths/s, EMA).
+    # Tracker jitter alone reads as ~2; deliberate wiggling as 6 and up.
+    wiggle_on: float = 4.0
+    wiggle_off: float = 2.0
+    wiggle_min_hold: float = 0.12  # activity must stay up this long: rejects single-frame jitter spikes
+    wiggle_gap_slow: float = 0.16  # seconds between zigzag notes at wiggle_on
+    wiggle_gap_fast: float = 0.07  # ... at wiggle_full
+    wiggle_full: float = 12.0
     # Keyboard span the frame width maps onto (MIDI): C2 .. C6.
     key_low: int = 36
     key_high: int = 84
-    # Sweep lattice: chord tones tiled across this many octaves.
-    lattice_octaves: int = 4
 
 
 @dataclass

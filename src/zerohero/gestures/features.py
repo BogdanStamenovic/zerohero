@@ -33,6 +33,7 @@ from zerohero.events import (
 # as extended. Without a margin, a nearly-straight-but-relaxed finger flickers
 # across the boundary every frame.
 _GESTURE_MIN_SCORE = 0.5
+_TIPS = (THUMB_TIP, INDEX_TIP, MIDDLE_TIP, RING_TIP, PINKY_TIP)
 _EXTEND_MARGIN = 1.05
 
 _NON_THUMB_TIPS_PIPS = (
@@ -53,6 +54,9 @@ class HandFeatures:
     width: float
     extended: tuple[bool, bool, bool, bool, bool]  # thumb, index, middle, ring, pinky
     closed_score: float  # 0..1, fraction of the four non-thumb fingers curled
+    # Fingertips relative to the palm centre, in hand widths: the shape of the
+    # hand independent of where it is. Frame-to-frame change = finger activity.
+    tips: tuple[tuple[float, float], ...] = ()
 
     @classmethod
     def from_hand(cls, hand: Hand) -> HandFeatures:
@@ -94,4 +98,5 @@ class HandFeatures:
 
         index_e, middle_e, ring_e, pinky_e = finger_flags
         extended = (thumb_extended, index_e, middle_e, ring_e, pinky_e)
-        return cls(palm=palm, width=safe_width, extended=extended, closed_score=closed_score)
+        tips = tuple(((lm[i].x - palm[0]) / safe_width, (lm[i].y - palm[1]) / safe_width) for i in _TIPS)
+        return cls(palm=palm, width=safe_width, extended=extended, closed_score=closed_score, tips=tips)

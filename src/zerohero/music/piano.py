@@ -2,13 +2,16 @@
 
 Three ways to play, all over the chord the guitar is on:
 
-- grip hit      -> block chord voiced around the keyboard position of the hand
-- sweep         -> the chord tones tiled across the keyboard; the hand crossing
-                   a slot plays that tone, so hand speed is the tempo
-- passage       -> a run through the chord's scale from the hand's position
+- chord hit  -> open hand hit down: block chord voiced at the hand's position
+- sweep      -> below the limiter, the chord tones tiled across the keyboard;
+                the hand crossing a slot plays that tone, so speed is tempo
+- zigzag     -> fingers wiggling: random scale steps around the hand, drifting
+                the way the hand moves
 """
 
 from __future__ import annotations
+
+import random
 
 from zerohero.config import CH_PIANO, MusicConfig, PianoConfig
 from zerohero.events import NoteEvent
@@ -66,22 +69,19 @@ def voicing_at(chord: Chord, center: int, density: float) -> list[int]:
     return sorted(set(notes))
 
 
-def grip_chord(
-    chord: Chord, x: float, intensity: float, vibe: float, downward: bool, cfg: MusicConfig, pcfg: PianoConfig
+def chord_hit(
+    chord: Chord, x: float, intensity: float, vibe: float, cfg: MusicConfig, pcfg: PianoConfig
 ) -> list[NoteEvent]:
-    """Block chord at the hand's position. Held by the mode until the grip opens."""
+    """Open hand hit down: a block chord at the hand's position, rolled slightly."""
     center = key_at(x, pcfg)
     notes = voicing_at(chord, center, vibe)
-    if downward or vibe > 0.85:
-        notes = [notes[0] - 12, *notes]  # weight in the bass, like leaning into it
+    if vibe > 0.85 or intensity > 0.8:
+        notes = [notes[0] - 12, *notes]  # weight in the bass when leaning into it
     notes = [n for n in notes if 21 <= n <= 108]
     vel = velocity(cfg, intensity, vibe)
-    if downward:
-        vel = min(127, vel + 10)
-    # Tiny roll so the chord sounds like fingers, not a sequencer.
     roll = _lerp(0.012, 0.003, intensity)
     return [
-        NoteEvent(offset=i * roll, note=n, velocity=vel, duration=cfg.piano_sustain * 3, channel=CH_PIANO)
+        NoteEvent(offset=i * roll, note=n, velocity=vel, duration=cfg.piano_sustain, channel=CH_PIANO)
         for i, n in enumerate(notes)
     ]
 
@@ -114,45 +114,59 @@ def sweep_note(
     return NoteEvent(offset=0.0, note=notes[slot], velocity=vel, duration=duration, channel=CH_PIANO)
 
 
-def passage(
-    chord: Chord,
-    x: float,
-    direction: str,
-    intensity: float,
-    vibe: float,
-    erratic: bool,
-    cfg: MusicConfig,
-    pcfg: PianoConfig,
-) -> list[NoteEvent]:
-    """A run through the chord scale from the hand's position, up or down.
+class Zigzag:
+    """Random zigzag notes around the hand, drifting where the hand is heading.
 
-    Erratic motion gives a zigzag instead of a straight run.
+    Stateful per hand so consecutive notes make a line, not a lottery: each
+    note steps 1-3 scale degrees, flipping direction most of the time (the
+    zigzag), with the hand's drift pulling the centre of gravity along.
     """
-    scale = chord_scale(chord)
-    start = key_at(x, pcfg)
-    steps = 4 + int(round(5 * _clip(intensity, 0, 1)) + round(2 * _clip(vibe, 0, 1)))
-    spacing = _lerp(0.12, 0.045, intensity)
-    step = 1 if direction == "up" else -1
-    run: list[int] = []
-    n = start
-    # Walk semitone by semitone, keeping scale tones, until we have enough.
-    guard = 0
-    while len(run) < steps and guard < 60:
-        guard += 1
-        n += step
-        if n % 12 in scale and 21 <= n <= 108:
-            run.append(n)
-    if erratic and len(run) >= 4:
-        # zigzag: 0 2 1 3 2 4 ... keeps the direction but wobbles
-        zig = []
-        for i in range(len(run)):
-            j = i + 1 if i % 2 == 0 and i + 1 < len(run) else i - 1 if i % 2 == 1 else i
-            zig.append(run[max(0, min(len(run) - 1, j))])
-        run = zig
-    base_vel = velocity(cfg, intensity, vibe)
-    events = []
-    for i, note in enumerate(run):
-        # crescendo into the top of the run
-        v = int(_clip(base_vel * (0.75 + 0.25 * i / max(1, len(run) - 1)), 1, 127))
-        events.append(NoteEvent(offset=i * spacing, note=note, velocity=v, duration=spacing * 2.2, channel=CH_PIANO))
-    return events
+
+    def __init__(self, seed: int = 0) -> None:
+        self._rng = random.Random(seed)
+        self._last: int | None = None
+        self._dir = 1
+
+    def next(
+        self, chord: Chord, x: float, drift: str, activity: float, vibe: float, cfg: MusicConfig, pcfg: PianoConfig
+    ) -> NoteEvent:
+        scale = chord_scale(chord)
+        centre = key_at(x, pcfg)
+        # Stay within an octave of the hand; the hand moving pulls the pattern with it.
+        if self._last is None or abs(self._last - centre) > 12:
+            self._last = _nearest_scale_note(centre, scale)
+        if self._rng.random() < 0.7:
+            self._dir = -self._dir
+        if drift == "right" and self._rng.random() < 0.6:
+            self._dir = 1
+        elif drift == "left" and self._rng.random() < 0.6:
+            self._dir = -1
+        note = _scale_step(self._last, scale, self._dir * self._rng.choice((1, 1, 2, 3)))
+        if abs(note - centre) > 12:  # bounce off the octave walls around the hand
+            self._dir = -self._dir
+            note = _scale_step(self._last, scale, self._dir * 2)
+        note = max(21, min(108, note))
+        self._last = note
+        vel = velocity(cfg, 0.3 + 0.7 * _clip(activity, 0, 1), vibe)
+        vel = int(_clip(vel * self._rng.uniform(0.85, 1.0), 1, 127))
+        return NoteEvent(offset=0.0, note=note, velocity=vel, duration=0.35, channel=CH_PIANO)
+
+
+def _nearest_scale_note(midi: int, scale: tuple[int, ...]) -> int:
+    for d in range(12):
+        for cand in (midi - d, midi + d):
+            if cand % 12 in scale:
+                return cand
+    return midi
+
+
+def _scale_step(midi: int, scale: tuple[int, ...], steps: int) -> int:
+    n = midi
+    direction = 1 if steps > 0 else -1
+    for _ in range(abs(steps)):
+        n += direction
+        guard = 0
+        while n % 12 not in scale and guard < 12:
+            n += direction
+            guard += 1
+    return n

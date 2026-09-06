@@ -47,6 +47,7 @@ class OverlayState:
     last_event_t: float = 0.0
     fps: float = 0.0
     link: str = ""
+    limiter: float | None = None  # piano: keyboard surface line, fraction of height
 
 
 class Overlay:
@@ -64,6 +65,10 @@ class Overlay:
             self._draw_hand(image, hand, closed, w, h)
         for side, (px, py, vx, vy, _closed) in state.tracks.items():
             self._draw_velocity_arrow(image, side, px, py, vx, vy, w, h)
+        if state.limiter is not None:
+            ly = int(state.limiter * h)
+            cv2.line(image, (0, ly), (w, ly), (80, 200, 255), 1, cv2.LINE_AA)
+            cv2.putText(image, "keys", (6, ly - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (80, 200, 255), 1, cv2.LINE_AA)
 
         self._draw_chord_strip(image, state, w, h)
         self._draw_vibe_bar(image, state, w, h)

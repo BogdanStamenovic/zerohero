@@ -142,6 +142,7 @@ class App:
             last_event_t=self.last_event_t,
             fps=fps,
             link=self.mode.status(),
+            limiter=self.cfg.piano.limiter_y if self.cfg.mode == "piano" else None,
         )
         self.view.draw(frame, state)
         return self.view.poll_key()

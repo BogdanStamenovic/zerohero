@@ -16,17 +16,18 @@ move to the next chord.
 **Piano.** The piano goes with the guitar: it plays whatever chord the
 guitar is on and never changes it. Your hands are the pianist. Where your
 hand is across the frame is where you are on the keyboard, left is low,
-right is high. What the hand does decides what plays:
+right is high. A line across the screen is the keyboard surface: above it
+you just move around, below it you are on the keys.
 
 | the hand | what plays |
 |---|---|
-| hit with a grip, fingers curled like holding a chord | a block chord at that spot, held until you open the hand |
-| open hand sweeping left or right | an arpeggio: the chord's notes are laid across the keyboard and each one plays as your hand passes it, so your speed is the tempo and a fast sweep is a glissando |
-| open hand hitting up or down, or wiggling about | a run through the chord's scale in that direction, longer and faster the harder you hit |
+| open hand, hit down | a chord at that spot |
+| below the line, move sideways | a sweep: the chord's notes are laid across the keyboard and each one plays as your hand passes it, so your speed is the tempo and a fast sweep is a glissando |
+| wiggle your fingers | random zigzag notes around where the hand is, drifting the way the hand moves |
 
 How hard you hit sets the accent. How much you are moving overall sets the
 dynamics and how thick the chords get (7ths, 9ths). Both hands work
-independently, so a left-hand chord can hold under a right-hand sweep.
+independently.
 
 **Link.** One device runs the guitar as *lead*, the other runs the piano as
 *follower*. The follower's chord changes when the guitar's does. Works over

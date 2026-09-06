@@ -88,7 +88,7 @@ src/zerohero/
   gestures/conduct.py   BeatDetector (conducting hits)
   gestures/vibe.py      VibeMeter (energy 0..1)
   gestures/pipeline.py  GesturePipeline: Frame -> list[GestureEvent]
-  gestures/pianist.py   per-hand piano detectors: grip hit, sweep, passage
+  gestures/pianist.py   per-hand piano detectors: chord hit, sweep, wiggle
   engine/session.py     progression state
   engine/guitar_mode.py
   engine/piano_mode.py
@@ -115,7 +115,7 @@ See the file. Summary:
   - `FistClose`, `FistOpen` edge events
   - `Beat(direction, intensity, closed)` a generic conducting hit (unused by
     the current piano; kept for experiments)
-  - pianist events `GripHit`, `GripRelease`, `SweepStep`, `Passage` (piano)
+  - pianist events `ChordHit`, `SweepStep`, `WiggleNote` (piano)
 - `NoteEvent(offset, note, velocity, duration, channel)`; `offset` is seconds
   relative to when the phrase is scheduled.
 
@@ -143,19 +143,22 @@ strum starts (the mode handles that via `Scheduler.cut(channel)`).
 The piano is accompaniment to a guitar session: the chord comes from the
 linked guitar and gestures never change it. The hand is the pianist.
 `gestures/pianist.py` has one `Pianist` per hand fed every frame from
-`PianoMode.observe()` with the hand's track and its slot on the lattice:
+`PianoMode.observe()` with the hand's track and its slot on the lattice.
+Hand shape is never needed: everything is position and motion.
 
-| hand | event | plays |
+| the hand | event | plays |
 |---|---|---|
-| gripped (fingers curled, `closed_score` hysteresis 0.55/0.35) and a sharp onset | `GripHit(x, intensity, downward)` | `piano.grip_chord`: closed voicing with the root just below the key at `x`, held until `GripRelease` (`Scheduler.release`) |
-| open, moving sideways above `sweep_speed_on`, crossing lattice slots | `SweepStep(slot, direction, speed)` | `piano.sweep_note`: the chord tone at that slot; speed sets velocity and shortens the note |
-| open, sharp vertical onset, or erratic (>= 2 horizontal reversals in 0.5 s) | `Passage(x, direction, intensity, erratic)` | `piano.passage`: a run through `chord_scale` from the key at `x`, zigzag when erratic |
+| sharp downward onset (open hand hit) | `ChordHit(x, intensity)` | `piano.chord_hit`: closed voicing with the root just below the key at `x`, rolled, sustained `piano_sustain` |
+| below the **limiter**, moving sideways above `sweep_speed_on`, crossing lattice slots | `SweepStep(slot, direction, speed)` | `piano.sweep_note`: the chord tone at that slot; speed sets velocity and shortens the note |
+| fingertips moving relative to the palm above `wiggle_on` (`HandTrack.finger_activity`) | `WiggleNote(x, drift, activity)` every `wiggle_gap` seconds | `piano.Zigzag.next`: a random scale step near the key at `x`, direction flipping most of the time, pulled along by the hand's drift |
 
-"Where on the keyboard" is the hand's x mapped onto MIDI `key_low..key_high`
-(C2..C6), same map for both hands. The lattice is the chord tones tiled
-across that span; `vibe` thickens it with 7th and 9th in three buckets so it
-does not flicker. Accents come from the predicted peak speed of the hit,
-dynamics from `vibe`. Tunables live in `PianoConfig`.
+The **limiter** (`PianoConfig.limiter_y`, drawn in both views) is the keyboard
+surface: above it the hand only travels, so sideways motion is silent; below
+it sideways motion sweeps. "Where on the keyboard" is the hand's x mapped
+onto MIDI `key_low..key_high` (C2..C6), same map for both hands. The lattice
+is the chord tones tiled across that span; `vibe` thickens it with 7th and
+9th in three buckets so it does not flicker. Accents come from the predicted
+peak speed of the hit, dynamics from `vibe`. Tunables live in `PianoConfig`.
 
 ### synth
 
@@ -167,8 +170,7 @@ back to `basic.NumpySynth` with a warning. Programs: guitar 25 (steel), piano 0.
 `Scheduler(synth)`: `play(events, t0=None)` schedules note-ons at
 `t0 + offset` and note-offs at `t0 + offset + duration`; `cut(channel)` cancels
 pending events on a channel and sends all-notes-off; `release(channel, notes)`
-note-offs just those notes and drops their pending offs (held chords);
-`stop()`.
+note-offs just those notes and drops their pending offs; `stop()`.
 
 ### vision
 
