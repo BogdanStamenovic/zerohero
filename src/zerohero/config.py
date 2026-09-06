@@ -48,7 +48,7 @@ class GestureConfig:
     fist_close_above: float = 0.7
     fist_open_below: float = 0.4
     fist_min_hold: float = 0.06
-    fist_refractory: float = 0.25
+    fist_refractory: float = 0.6  # chord changes never come faster than this
     # Conducting hits (piano), 2D speed.
     beat_speed_on: float = 3.0
     beat_speed_off: float = 1.2

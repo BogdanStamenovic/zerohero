@@ -79,6 +79,7 @@ def test_flicker_is_rejected_but_a_real_hold_still_fires():
 
 def test_refractory_suppresses_a_close_that_follows_too_soon():
     cfg = GestureConfig()
+    cfg.fist_refractory = 0.25  # the scenario below is timed for this value
     # open(0-0.15) close(0.15-0.30)->fires  open(0.30-0.40)  close(0.40-0.50)->suppressed
     # open(0.50-0.60)  close(0.60-0.90)->fires (refractory has elapsed)
     shape = _windowed_shape([(0.15, 0.30), (0.40, 0.50), (0.60, 0.90)])

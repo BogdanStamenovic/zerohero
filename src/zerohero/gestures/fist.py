@@ -11,6 +11,7 @@ GestureEdge = FistClose | FistOpen
 
 
 _NOT_CLOSED_IS_OPEN = 0.3  # seconds in the dead zone that count as an open hand
+_NOT_CLOSED_IS_OPEN_FROM_FIST = 0.7  # ... when the hand was a confirmed fist
 _GAP_FORGETS_STATE = 1.0  # seconds without the hand before its prior state is unknown
 
 
@@ -71,7 +72,9 @@ class FistDetector:
             # an ordinary open hand, so a hand that simply is not a fist for a
             # while must count as open, or the close edge never gets a baseline.
             self._not_closed_since = t if self._not_closed_since is None else self._not_closed_since
-            raw = False if (t - self._not_closed_since) >= _NOT_CLOSED_IS_OPEN else None
+            # A held fist flickers to "None" too; give it longer before calling it open.
+            limit = _NOT_CLOSED_IS_OPEN_FROM_FIST if self._confirmed else _NOT_CLOSED_IS_OPEN
+            raw = False if (t - self._not_closed_since) >= limit else None
 
         if raw is not None and raw != self._candidate:
             self._candidate = raw
