@@ -66,6 +66,17 @@ class Lead:
                 return  # listen socket closed by stop()
             conn = Connection(sock, str(addr))
             with self._lock:
+                # accept() can still hand back a connection whose handshake
+                # completed just before stop() closed the listen socket - it
+                # was already in the kernel backlog, not something close()
+                # drops. Registering it here under the same lock stop() uses
+                # to snapshot-and-clear makes the two mutually exclusive: if
+                # stop() already ran, is_set() is True by the time we get the
+                # lock, so we drop the connection unregistered instead of
+                # leaving it to hang forever with no Bye and no reader.
+                if self._stop.is_set():
+                    sock.close()
+                    return
                 self._conns[conn] = ""
             threading.Thread(target=self._reader, args=(conn,), daemon=True).start()
 
@@ -126,14 +137,13 @@ class Lead:
         return self._listen_sock.getsockname()[1]
 
     def stop(self) -> None:
-        self._stop.set()
         with self._lock:
+            self._stop.set()
             conns = list(self._conns)
+            self._conns.clear()
         for conn in conns:
             conn.send(Bye())
             conn.close()
-        with self._lock:
-            self._conns.clear()
         if self._beacon is not None:
             self._beacon.stop()
         if self._listen_sock is not None:
