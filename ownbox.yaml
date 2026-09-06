@@ -1,0 +1,27 @@
+schema: 1
+name: zerohero
+description: Air guitar and air piano from a webcam - type chords, play them with your hands, link two devices
+homepage: https://github.com/BogdanStamenovic/zerohero
+tags: [cli, music, computer-vision, mediapipe, midi, guitar, piano, python]
+install:
+  platforms: [linux, darwin, windows]
+  # install.py provisions Python 3.12 via uv (MediaPipe 0.10 needs it), creates
+  # .venv, installs the package, and downloads the hand model + soundfont into
+  # ~/.local/share/zerohero. libfluidsynth is optional: without it a built-in
+  # numpy synth is used.
+  setup:
+    linux:   [python3 install.py]
+    darwin:  [python3 install.py]
+    windows: [python install.py]
+  update:
+    linux:   [python3 install.py]
+    darwin:  [python3 install.py]
+    windows: [python install.py]
+  remove:
+    linux:   [python3 uninstall.py --yes]
+    darwin:  [python3 uninstall.py --yes]
+    windows: [python uninstall.py --yes]
+command:
+  linux:   .venv/bin/zerohero
+  darwin:  .venv/bin/zerohero
+  windows: '.venv\Scripts\zerohero.exe'

@@ -92,7 +92,7 @@ class LinkConfig:
 class Config:
     mode: str = "guitar"  # guitar | piano
     progression: str = ""
-    window: bool = True
+    ui: str = "auto"  # auto | window | terminal | none
     record: Path | None = None
     replay: Path | None = None
     replay_realtime: bool = True

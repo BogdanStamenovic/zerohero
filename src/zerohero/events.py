@@ -69,7 +69,9 @@ class Frame:
 
     @classmethod
     def from_json(cls, d: dict[str, Any]) -> Frame:
-        return cls(t=float(d["t"]), width=int(d["w"]), height=int(d["h"]), hands=[Hand.from_json(h) for h in d["hands"]])
+        return cls(
+            t=float(d["t"]), width=int(d["w"]), height=int(d["h"]), hands=[Hand.from_json(h) for h in d["hands"]]
+        )
 
 
 # ---- gesture events ------------------------------------------------------

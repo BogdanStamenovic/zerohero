@@ -90,7 +90,10 @@ src/zerohero/
   link/discovery.py     UDP broadcast beacon + discover
   link/lead.py          Lead: accept followers, broadcast events
   link/follow.py        Follower: connect, clock offset, tempo estimate
-  ui/overlay.py         draw landmarks, chord strip, meters; key handling
+  ui/overlay.py         OpenCV window: landmarks, chord strip, meters; key handling
+  ui/terminal.py        the same view drawn with braille dots in the terminal
+  ui/keys.py            cross-platform non-blocking key reader (termios / msvcrt)
+  ui/view.py            View protocol and open_view(): window | terminal | none
 ```
 
 ### events.py (shared, read this first)
@@ -225,6 +228,18 @@ Bluetooth: `--lead --transport bt` listens on RFCOMM channel 3;
 `--follow bt:AA:BB:CC:DD:EE:FF` connects. Needs the devices paired first and a
 Python built with `AF_BLUETOOTH` (Linux). No SDP record is registered, so the
 channel number is fixed. This path is untested end to end; see README.
+
+### ui
+
+Two interchangeable views behind one protocol (`start`, `draw(frame, state)`,
+`poll_key`, `close`). `WindowView` is an OpenCV window with the camera image
+and the overlay. `TerminalView` draws the hand skeletons with braille dots
+(2x4 dots per cell) plus the chord strip and meters, using ANSI escapes and
+the alternate screen; on Windows it enables virtual-terminal processing
+through `SetConsoleMode`. Key input is `termios` on POSIX and `msvcrt` on
+Windows. `--ui auto` picks the window when a display exists (always on
+Windows/macOS, `DISPLAY`/`WAYLAND_DISPLAY` on Linux), else the terminal when
+stdout is a tty, else nothing.
 
 ## Setup and packaging
 
