@@ -63,11 +63,18 @@ def run_doctor() -> int:
     except Exception as e:
         _ok("audio output", False, str(e))
 
-    _ok(
-        "bluetooth sockets",
-        hasattr(socket, "AF_BLUETOOTH"),
-        "AF_BLUETOOTH available" if hasattr(socket, "AF_BLUETOOTH") else "not in this Python build; use WiFi/TCP link",
+    from zerohero.link.transport import bluetooth_available
+
+    bt_how = (
+        "AF_BLUETOOTH in this Python"
+        if hasattr(socket, "AF_BLUETOOTH")
+        else (
+            "RFCOMM through libc (Python built without bluetooth)"
+            if bluetooth_available()
+            else "not available; use the TCP link"
+        )
     )
+    _ok("bluetooth", bluetooth_available(), bt_how)
 
     # Camera last: it takes a second and needs the model.
     try:

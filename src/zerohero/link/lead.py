@@ -8,6 +8,7 @@ import threading
 import time
 
 from zerohero.config import LinkConfig
+from zerohero.link import bt_raw
 from zerohero.link.discovery import Beacon
 from zerohero.link.protocol import Bye, ChordMsg, Hello, Message, Ping, Pong, ProtocolError, StrumMsg
 from zerohero.link.transport import Connection, listen_bt, listen_tcp
@@ -30,11 +31,12 @@ class Lead:
     def __init__(self, cfg: LinkConfig, transport: str = "tcp") -> None:
         self.cfg = cfg
         self.transport = transport
-        self._listen_sock: socket.socket | None = None
+        self._listen_sock: socket.socket | bt_raw.RawListener | None = None
         self._beacon: Beacon | None = None
         self._accept_thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._conns: dict[Connection, str] = {}  # conn -> follower name
+        self._chord: ChordMsg | None = None  # last chord sent, replayed to late joiners
         self._stop = threading.Event()
 
     def start(self) -> None:
@@ -56,7 +58,7 @@ class Lead:
         # thread while this one is parked in accept() is not guaranteed to
         # wake it promptly on Linux, which made stop() take as long as
         # whatever join() timeout was chosen instead of returning quickly.
-        self._listen_sock.settimeout(0.5)
+        self._listen_sock.settimeout(0.1)
         while not self._stop.is_set():
             try:
                 sock, addr = self._listen_sock.accept()
@@ -86,7 +88,11 @@ class Lead:
             if isinstance(first, Hello):
                 with self._lock:
                     self._conns[conn] = first.name
+                    chord = self._chord
                 log.info("follower connected: %s (%s)", first.name, conn.peer)
+                if chord is not None:
+                    # A follower that joins mid-song must not wait for the next change.
+                    conn.send(ChordMsg(index=chord.index, symbol=chord.symbol, t=time.monotonic()))
             elif first is None:
                 self._drop(conn)
                 return
@@ -114,7 +120,10 @@ class Lead:
         conn.close()
 
     def send_chord(self, index: int, symbol: str) -> None:
-        self._broadcast(ChordMsg(index=index, symbol=symbol, t=time.monotonic()))
+        msg = ChordMsg(index=index, symbol=symbol, t=time.monotonic())
+        with self._lock:
+            self._chord = msg
+        self._broadcast(msg)
 
     def send_strum(self, direction: str, intensity: float) -> None:
         self._broadcast(StrumMsg(direction=direction, intensity=intensity, t=time.monotonic()))

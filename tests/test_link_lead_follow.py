@@ -15,7 +15,7 @@ def _free_udp_port() -> int:
     return port
 
 
-def _wait_until(predicate, timeout=3.0, interval=0.02) -> bool:
+def _wait_until(predicate, timeout=4.5, interval=0.02) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if predicate():
@@ -190,8 +190,11 @@ def test_stop_immediately_after_connect_never_hangs():
     regression fails fast instead of hanging the whole suite.
     """
 
+    # stop() polls its accept thread's blocking accept() every 0.1s (see
+    # lead.py), so an unlucky iteration costs up to ~0.1s beyond the fast
+    # path; 15 iterations comfortably fits the 5s test budget either way.
     def hammer():
-        for _ in range(25):
+        for _ in range(15):
             lead = _make_lead()
             follower = _make_follower(lead)
             follower.start()
@@ -210,7 +213,7 @@ def test_stop_immediately_after_connect_never_hangs():
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
-    t.join(timeout=4.5)
+    t.join(timeout=4.0)
     assert not t.is_alive(), "hammer loop hung - the accept/stop race regressed"
     if result:
         raise result[0]

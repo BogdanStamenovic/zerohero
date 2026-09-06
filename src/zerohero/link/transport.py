@@ -6,6 +6,7 @@ import socket
 import struct
 import threading
 
+from zerohero.link import bt_raw
 from zerohero.link.protocol import Message, decode, encode
 
 # SO_SNDTIMEO bounds only the send path (Linux keeps send/recv timeouts
@@ -106,23 +107,31 @@ def connect_tcp(host: str, port: int, timeout: float = 5) -> Connection:
     return Connection(sock, f"{host}:{port}")
 
 
-def listen_bt(channel: int) -> socket.socket:
-    if not hasattr(socket, "AF_BLUETOOTH"):
+def bluetooth_available() -> bool:
+    return hasattr(socket, "AF_BLUETOOTH") or bt_raw.available()
+
+
+def listen_bt(channel: int) -> socket.socket | bt_raw.RawListener:
+    if hasattr(socket, "AF_BLUETOOTH"):
+        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        sock.bind(("", channel))
+        sock.listen(8)
+        return sock
+    if not bt_raw.available():
         raise BluetoothUnavailable()
-    sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-    sock.bind(("", channel))
-    sock.listen(8)
-    return sock
+    return bt_raw.listen(channel)
 
 
 def connect_bt(addr: str, channel: int, timeout: float = 10) -> Connection:
-    if not hasattr(socket, "AF_BLUETOOTH"):
+    if hasattr(socket, "AF_BLUETOOTH"):
+        sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+        sock.settimeout(timeout)
+        sock.connect((addr, channel))
+        sock.settimeout(None)
+        return Connection(sock, f"{addr}/{channel}")
+    if not bt_raw.available():
         raise BluetoothUnavailable()
-    sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
-    sock.settimeout(timeout)
-    sock.connect((addr, channel))
-    sock.settimeout(None)
-    return Connection(sock, f"{addr}/{channel}")
+    return Connection(bt_raw.connect(addr, channel, timeout), f"{addr}/{channel}")
 
 
 def parse_target(s: str, default_port: int, default_channel: int) -> tuple:

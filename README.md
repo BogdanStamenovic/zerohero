@@ -101,7 +101,7 @@ zerohero piano "Am G C F" --follow auto        # finds the lead by UDP broadcast
 zerohero piano "Am G C F" --follow 100.101.1.2 # direct, e.g. a Tailscale IP
 ```
 
-Bluetooth (Linux only, devices paired first):
+Bluetooth RFCOMM (Linux, devices paired first, channel 3):
 
 ```
 zerohero guitar "Am G C F" --lead --transport bt
@@ -130,8 +130,12 @@ the lead is back.
   second) start to merge.
 - Handedness comes from MediaPipe and is right nearly always, but crossing
   your hands confuses it.
-- The Bluetooth transport is written against Linux RFCOMM sockets and has not
-  been tested between two real devices yet. TCP has, on loopback and LAN.
+- The Bluetooth transport has not been tested between two real devices yet.
+  On the dev laptop it binds and listens on RFCOMM channel 3 and a connect
+  to a bogus address fails cleanly, and that is as far as one machine gets.
+  TCP has been tested end to end on loopback. The Python that `install.py`
+  provisions through uv is built without Bluetooth sockets, so RFCOMM goes
+  through libc via ctypes; `zerohero doctor` tells you which path you have.
 - The piano does not know rhythm beyond what you conduct or what the lead's
   strums imply. There is no metronome.
 - No individual string plucking, no bends, no palm mutes. Strums only.

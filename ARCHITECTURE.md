@@ -225,9 +225,14 @@ Discovery: lead broadcasts `{"zerohero":1,"port":P,"name":...}` on UDP
 `255.255.255.255:47474` once a second; `--follow auto` listens for up to 5 s.
 Direct `--follow host[:port]` skips discovery and works over Tailscale.
 Bluetooth: `--lead --transport bt` listens on RFCOMM channel 3;
-`--follow bt:AA:BB:CC:DD:EE:FF` connects. Needs the devices paired first and a
-Python built with `AF_BLUETOOTH` (Linux). No SDP record is registered, so the
-channel number is fixed. This path is untested end to end; see README.
+`--follow bt:AA:BB:CC:DD:EE:FF` connects. Needs the devices paired first. If
+the Python build has `AF_BLUETOOTH` the socket module is used directly;
+otherwise (uv's python-build-standalone, which install.py prefers, lacks it)
+`link/bt_raw.py` makes the socket through libc with ctypes and a hand-packed
+`sockaddr_rc`, doing bind/listen/accept/connect itself because CPython refuses
+address operations on a family it was not built with. No SDP record is
+registered, so the channel number is fixed. Listen and connect-failure are
+verified on one machine; two-device operation is untested; see README.
 
 ### ui
 

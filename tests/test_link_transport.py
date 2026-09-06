@@ -122,12 +122,35 @@ def test_parse_target(s, expected):
     assert parse_target(s, default_port=47475, default_channel=3) == expected
 
 
-def test_bluetooth_unavailable_when_no_af_bluetooth():
+def test_bluetooth_unavailable_without_af_bluetooth_or_libc_fallback(monkeypatch):
     if hasattr(socket, "AF_BLUETOOTH"):
         pytest.skip("this Python build has AF_BLUETOOTH; BluetoothUnavailable path not exercised")
+    from zerohero.link import bt_raw
     from zerohero.link.transport import connect_bt, listen_bt
 
+    monkeypatch.setattr(bt_raw, "available", lambda: False)
     with pytest.raises(BluetoothUnavailable):
         listen_bt(3)
     with pytest.raises(BluetoothUnavailable):
         connect_bt("AA:BB:CC:DD:EE:FF", 3)
+
+
+def test_bt_raw_listen_and_bogus_connect():
+    """Real RFCOMM through libc on this machine: bind+listen on channel 3, then a
+    connect to a made-up address must fail within the timeout, not hang."""
+    from zerohero.link import bt_raw
+
+    if not bt_raw.available():
+        pytest.skip("not Linux")
+    try:
+        listener = bt_raw.listen(3)
+    except OSError as e:
+        pytest.skip(f"no usable bluetooth adapter: {e}")
+    try:
+        listener.settimeout(0.05)
+        with pytest.raises(TimeoutError):
+            listener.accept()
+    finally:
+        listener.close()
+    with pytest.raises((OSError, TimeoutError)):
+        bt_raw.connect("00:11:22:33:44:55", 3, timeout=2.0)
