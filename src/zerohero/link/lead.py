@@ -143,6 +143,8 @@ class Lead:
     def port(self) -> int:
         """Actual bound TCP port (useful with cfg.port=0, e.g. in tests)."""
         assert self._listen_sock is not None, "call start() first"
+        if isinstance(self._listen_sock, bt_raw.RawListener):
+            return self._listen_sock.channel
         return self._listen_sock.getsockname()[1]
 
     def stop(self) -> None:
