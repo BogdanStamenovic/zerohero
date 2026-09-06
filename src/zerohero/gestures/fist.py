@@ -10,6 +10,10 @@ from zerohero.gestures.track import HandTrack
 GestureEdge = FistClose | FistOpen
 
 
+_NOT_CLOSED_IS_OPEN = 0.3  # seconds in the dead zone that count as an open hand
+_GAP_FORGETS_STATE = 1.0  # seconds without the hand before its prior state is unknown
+
+
 class FistDetector:
     """Hysteresis state machine on `closed_score`, debounced and edge-triggered.
 
@@ -33,6 +37,8 @@ class FistDetector:
         self._last_close_fire_t: float | None = None
         self._seen_open = False
         self._was_present = False
+        self._not_closed_since: float | None = None
+        self._missing_since: float | None = None
 
     @property
     def closed(self) -> bool:
@@ -42,19 +48,30 @@ class FistDetector:
         cfg = self.cfg
 
         if not track.present:
+            # The tracker often loses a hand for a few frames right as it
+            # closes into a fist. Keep the open baseline across a short gap;
+            # only a real absence makes the prior state unknown.
             if self._was_present:
-                self._reset_unknown()
+                self._missing_since = t
             self._was_present = False
+            if self._missing_since is not None and (t - self._missing_since) > _GAP_FORGETS_STATE:
+                self._reset_unknown()
             return None
         self._was_present = True
+        self._missing_since = None
 
         score = track.closed_score
         if score >= cfg.fist_close_above:
             raw: bool | None = True
+            self._not_closed_since = None
         elif score <= cfg.fist_open_below:
             raw = False
         else:
-            raw = None  # dead zone: hold whatever candidate we already had
+            # Dead zone. The recognizer reports "None" (0.5) for most frames of
+            # an ordinary open hand, so a hand that simply is not a fist for a
+            # while must count as open, or the close edge never gets a baseline.
+            self._not_closed_since = t if self._not_closed_since is None else self._not_closed_since
+            raw = False if (t - self._not_closed_since) >= _NOT_CLOSED_IS_OPEN else None
 
         if raw is not None and raw != self._candidate:
             self._candidate = raw
@@ -88,3 +105,4 @@ class FistDetector:
         self._candidate = None
         self._candidate_since = None
         self._seen_open = False
+        self._not_closed_since = None
