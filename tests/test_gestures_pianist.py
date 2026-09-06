@@ -60,10 +60,14 @@ def test_sweep_below_limiter_fires_slots_and_above_does_nothing():
 
 
 def test_slow_drift_and_rest_are_silent():
+    # Noise 0.002 (about 1 px at 480p) matches the live tracker on a still hand:
+    # fingertip steps stayed under 0.05 hand widths. The generator's noise is
+    # independent per landmark, which is harsher than the real, correlated jitter.
     slow = stroke_path((0.3, BELOW), (0.3 * W * 2, 0.0), 0.5, 2.0)
-    frames = motion([HandSpec("right", W, piecewise([(0.5, 2.5, slow)]))], 0.0, 3.0, rng=random.Random(3))
+    spec = [HandSpec("right", W, piecewise([(0.5, 2.5, slow)]))]
+    frames = motion(spec, 0.0, 3.0, rng=random.Random(3), noise_sigma=0.002)
     assert not run(frames)
-    frames = motion([HandSpec("right", W, hold_path((0.5, BELOW)))], 0.0, 3.0, rng=random.Random(4))
+    frames = motion([HandSpec("right", W, hold_path((0.5, BELOW)))], 0.0, 3.0, rng=random.Random(4), noise_sigma=0.002)
     assert not run(frames)
 
 

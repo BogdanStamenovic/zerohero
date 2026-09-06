@@ -98,5 +98,20 @@ class HandFeatures:
 
         index_e, middle_e, ring_e, pinky_e = finger_flags
         extended = (thumb_extended, index_e, middle_e, ring_e, pinky_e)
-        tips = tuple(((lm[i].x - palm[0]) / safe_width, (lm[i].y - palm[1]) / safe_width) for i in _TIPS)
+        # Palm-aligned frame: origin at the palm centre, y axis along wrist ->
+        # middle MCP, unit = hand width. Rotating or moving the whole hand
+        # leaves these unchanged; only the fingers themselves change them.
+        # Axis from the wrist to the mean of the four knuckles: averaging the
+        # knuckles keeps landmark jitter from rotating the whole frame.
+        kx = sum(lm[i].x for i in (INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP)) / 4
+        ky = sum(lm[i].y for i in (INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP)) / 4
+        axis_len = max(math.hypot(kx - wrist.x, ky - wrist.y), 1e-6)
+        ax, ay = (kx - wrist.x) / axis_len, (ky - wrist.y) / axis_len
+        tips = tuple(
+            (
+                ((lm[i].x - palm[0]) * ay - (lm[i].y - palm[1]) * ax) / safe_width,
+                ((lm[i].x - palm[0]) * ax + (lm[i].y - palm[1]) * ay) / safe_width,
+            )
+            for i in _TIPS
+        )
         return cls(palm=palm, width=safe_width, extended=extended, closed_score=closed_score, tips=tips)

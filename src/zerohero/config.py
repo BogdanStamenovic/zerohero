@@ -66,7 +66,7 @@ class PianoConfig:
     # The limiter is the keyboard surface: a horizontal line at this fraction
     # of the frame height (y grows downward). Above it the hand only travels;
     # below it, sideways movement sweeps the keys.
-    limiter_y: float = 0.55
+    limiter_y: float = 0.5
     # An open hand hitting downward is a chord. Measured live: deliberate hits
     # peak at 6-20 hand widths/s, casual moves at 1-3.
     hit_speed_on: float = 4.0
@@ -75,16 +75,24 @@ class PianoConfig:
     hit_refractory: float = 0.2
     # Sweep: below the limiter, sideways speed above this fires a note per
     # lattice slot crossed.
-    sweep_speed_on: float = 1.5
+    sweep_speed_on: float = 1.0
     sweep_min_gap: float = 0.03
-    # Wiggle: fingertips moving relative to the palm (hand widths/s, EMA).
-    # Tracker jitter alone reads as ~2; deliberate wiggling as 6 and up.
-    wiggle_on: float = 4.0
-    wiggle_off: float = 2.0
-    wiggle_min_hold: float = 0.12  # activity must stay up this long: rejects single-frame jitter spikes
-    wiggle_gap_slow: float = 0.16  # seconds between zigzag notes at wiggle_on
-    wiggle_gap_fast: float = 0.07  # ... at wiggle_full
-    wiggle_full: float = 12.0
+    # Wiggle: the fingertips (in a palm-aligned frame, so moving or turning
+    # the hand does not count) reverse direction repeatedly. Live tracker
+    # jitter on a still hand produced steps under 0.02 hand widths.
+    wiggle_window: float = 0.4
+    wiggle_min_step: float = 0.08  # hand widths per frame; a still hand stays under 0.05 live
+    wiggle_reversals_on: int = 3
+    wiggle_reversals_off: int = 1
+    # A wiggle is judged only while the hand itself is slow: a travelling hand
+    # makes the fingertips jitter in the tracker and looks like a wiggle.
+    wiggle_max_hand_speed: float = 3.0
+    # A chord hit must be clearly vertical: |vy| >= this * |vx|. Sweeps have a
+    # vertical component that otherwise fires chords.
+    hit_vertical_ratio: float = 1.5
+    wiggle_gap_slow: float = 0.16  # seconds between zigzag notes when barely wiggling
+    wiggle_gap_fast: float = 0.07  # ... when wiggling hard
+    wiggle_full: float = 12.0  # finger activity (hand widths/s) that counts as "hard"
     # Keyboard span the frame width maps onto (MIDI): C2 .. C6.
     key_low: int = 36
     key_high: int = 84

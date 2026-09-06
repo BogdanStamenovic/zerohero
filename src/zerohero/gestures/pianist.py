@@ -24,7 +24,7 @@ from typing import Literal
 from zerohero.config import PianoConfig
 from zerohero.events import ChordHit, PianistEvent, Side, SweepStep, WiggleNote
 from zerohero.gestures._onset import onset_intensity, predict_peak
-from zerohero.gestures.track import HandTrack
+from zerohero.gestures.track import HandTrack, reversals
 
 
 def _lerp(a: float, b: float, t: float) -> float:
@@ -42,7 +42,6 @@ class Pianist:
         self._last_sweep_t = 0.0
         self.wiggling = False
         self._next_wiggle_t = 0.0
-        self._wiggle_since: float | None = None  # when activity first rose above wiggle_on
 
     def below_limiter(self, track: HandTrack) -> bool:
         return track.palm[1] >= self.cfg.limiter_y
@@ -57,7 +56,6 @@ class Pianist:
             self._slot = None
             self._hit_locked = False
             self.wiggling = False
-            self._wiggle_since = None
             return out
 
         vx, vy = track.velocity
@@ -69,7 +67,7 @@ class Pianist:
             if speed <= cfg.hit_speed_off:
                 self._hit_locked = False
         elif speed >= cfg.hit_speed_on and (self._last_hit_t is None or t - self._last_hit_t >= cfg.hit_refractory):
-            downward = vy > 0 and vy >= abs(vx)
+            downward = vy > 0 and vy >= cfg.hit_vertical_ratio * abs(vx)
             if downward:
                 peak = predict_peak(speed, prev[1], t - prev[0]) if prev else speed
                 intensity = onset_intensity(peak, cfg.hit_speed_on, cfg.hit_speed_full)
@@ -79,19 +77,16 @@ class Pianist:
 
         # ---- wiggle: fingers moving relative to the palm ----
         act = track.finger_activity
-        if not self.wiggling:
-            if act >= cfg.wiggle_on:
-                self._wiggle_since = self._wiggle_since if self._wiggle_since is not None else t
-                if t - self._wiggle_since >= cfg.wiggle_min_hold:
-                    self.wiggling = True
-                    self._next_wiggle_t = t  # first note right away
-            else:
-                self._wiggle_since = None
-        elif act <= cfg.wiggle_off:
+        flips = reversals(track.tip_steps, t, cfg.wiggle_window, cfg.wiggle_min_step)
+        if speed > cfg.wiggle_max_hand_speed:
+            flips = 0
+        if not self.wiggling and flips >= cfg.wiggle_reversals_on:
+            self.wiggling = True
+            self._next_wiggle_t = t  # first note right away
+        elif self.wiggling and flips <= cfg.wiggle_reversals_off:
             self.wiggling = False
-            self._wiggle_since = None
         if self.wiggling and t >= self._next_wiggle_t:
-            level = (act - cfg.wiggle_on) / max(cfg.wiggle_full - cfg.wiggle_on, 1e-6)
+            level = act / max(cfg.wiggle_full, 1e-6)
             drift: Literal["left", "right", "none"] = "right" if vx > 1.0 else "left" if vx < -1.0 else "none"
             activity = max(0.0, min(1.0, level))
             out.append(WiggleNote(t=t, hand=self.side, x=track.palm[0], drift=drift, activity=activity))

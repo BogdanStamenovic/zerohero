@@ -7,6 +7,7 @@ Frames arrive at irregular intervals, so velocity is always computed from
 from __future__ import annotations
 
 import math
+from collections import deque
 
 from zerohero.config import GestureConfig
 from zerohero.events import Side
@@ -45,6 +46,9 @@ class HandTrack:
         # "fingers wiggling" signal, independent of where the hand travels.
         self.finger_activity = 0.0
         self._tips: tuple[tuple[float, float], ...] = ()
+        # Recent per-frame fingertip steps along the finger axis (t, step) for
+        # the wiggle detector: a wiggle is a run of direction reversals.
+        self.tip_steps: deque[tuple[float, float]] = deque()
         self.last_t: float | None = None
         self._smoothed_width = 0.0
 
@@ -75,14 +79,19 @@ class HandTrack:
 
         self.speed = math.hypot(*self.velocity)
         if dt is not None and _MIN_DT <= dt <= _MAX_DT and self._tips and len(self._tips) == len(features.tips):
-            pairs = zip(self._tips, features.tips, strict=True)
-            moved = sum(math.hypot(a[0] - b[0], a[1] - b[1]) for a, b in pairs) / len(self._tips)
-            # Heavier smoothing than the palm velocity: five noisy tips, and
-            # the wiggle only needs to be right within ~100 ms, not per frame.
+            pairs = list(zip(self._tips, features.tips, strict=True))
+            moved = sum(math.hypot(a[0] - b[0], a[1] - b[1]) for a, b in pairs) / len(pairs)
+            # Signed step along the finger axis, averaged over the four fingers
+            # (the thumb moves sideways). Curling and uncurling flip its sign.
+            step = sum(b[1] - a[1] for a, b in pairs[1:]) / (len(pairs) - 1)
             beta = 0.6
             self.finger_activity = beta * self.finger_activity + (1 - beta) * moved / dt
+            self.tip_steps.append((t, step))
+            while self.tip_steps and t - self.tip_steps[0][0] > 0.5:
+                self.tip_steps.popleft()
         else:
             self.finger_activity = 0.0
+            self.tip_steps.clear()
         self._tips = features.tips
         self.palm = features.palm
         self.width = features.width
@@ -95,6 +104,26 @@ class HandTrack:
             self.speed = 0.0
             self.finger_activity = 0.0
             self._tips = ()
+            self.tip_steps.clear()
             self._smoothed_width = 0.0
             self.last_t = None
         self.present = False
+
+
+def reversals(steps: deque[tuple[float, float]], now: float, window: float, min_step: float) -> int:
+    """Direction reversals of the fingertip motion inside the last `window` seconds.
+
+    Steps smaller than `min_step` (hand widths) are jitter and are skipped, so
+    a still hand scores 0 however noisy the tracker is; a wiggle alternates
+    sign every few frames and scores high.
+    """
+    last_sign = 0
+    count = 0
+    for t, step in steps:
+        if now - t > window or abs(step) < min_step:
+            continue
+        sign = 1 if step > 0 else -1
+        if last_sign and sign != last_sign:
+            count += 1
+        last_sign = sign
+    return count
