@@ -33,6 +33,9 @@ def _add_play_args(p: argparse.ArgumentParser) -> None:
         "(auto: window if a display exists, else terminal)",
     )
     p.add_argument("--no-window", action="store_true", help="same as --ui terminal")
+    p.add_argument(
+        "--torch", action="store_true", help="dark room: white fullscreen window so the screen lights your hands"
+    )
     p.add_argument("--record", type=Path, metavar="FILE", help="write hand landmarks as JSONL for replay")
     p.add_argument("--replay", type=Path, metavar="FILE", help="run from a recorded JSONL instead of the camera")
     p.add_argument("--synth", choices=["auto", "fluid", "basic", "none"], help="audio backend")
@@ -93,6 +96,9 @@ def _config_from_args(a: argparse.Namespace, mode: str) -> Config:
     if a.no_mirror:
         cfg.camera.mirror = False
     cfg.ui = "terminal" if a.no_window else a.ui
+    if a.torch:
+        cfg.ui = "window"
+        cfg.torch = True
     cfg.record = a.record
     cfg.replay = a.replay
     if a.synth:

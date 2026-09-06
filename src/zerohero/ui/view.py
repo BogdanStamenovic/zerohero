@@ -30,7 +30,7 @@ class WindowView:
         from zerohero.ui.overlay import Overlay, Window
 
         self.overlay = Overlay(cfg)
-        self.window = Window(title)
+        self.window = Window(title, fullscreen=cfg.torch)
 
     def start(self) -> None:
         pass

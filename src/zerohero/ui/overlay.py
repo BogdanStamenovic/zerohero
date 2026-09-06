@@ -52,11 +52,20 @@ class OverlayState:
 
 class Overlay:
     def __init__(self, cfg: Config) -> None:
+        self.torch = bool(getattr(cfg, "torch", False))
+        self.fg = (30, 30, 30) if self.torch else (255, 255, 255)
         self.cfg = cfg
 
     def draw(self, image: np.ndarray | None, frame: Frame, state: OverlayState) -> np.ndarray:
         if image is None:
             image = np.zeros((frame.height, frame.width, 3), dtype=np.uint8)
+        if self.torch:
+            # The laptop screen is the only lamp in a dark room: paint it white
+            # and keep the camera view as a thumbnail so the tracking stays visible.
+            canvas = np.full_like(image, 255)
+            th, tw = image.shape[0] // 4, image.shape[1] // 4
+            canvas[8 : 8 + th, image.shape[1] - tw - 8 : image.shape[1] - 8] = cv2.resize(image, (tw, th))
+            image = canvas
         h, w = image.shape[:2]
 
         for hand in frame.hands:
@@ -105,7 +114,7 @@ class Overlay:
             x0, x1 = int(i * slot), int((i + 1) * slot)
             bg = (0, 160, 0) if i == state.index else (60, 60, 60)
             cv2.rectangle(image, (x0 + 2, y - 20), (x1 - 2, y + 10), bg, -1)
-            cv2.putText(image, chord, (x0 + 8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(image, chord, (x0 + 8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.fg, 1, cv2.LINE_AA)
 
     def _draw_vibe_bar(self, image: np.ndarray, state: OverlayState, w: int, h: int) -> None:
         bar_w, bar_h = 24, int(h * 0.5)
@@ -123,7 +132,7 @@ class Overlay:
             (10, 22),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
-            (255, 255, 255),
+            self.fg,
             1,
             cv2.LINE_AA,
         )
@@ -139,13 +148,18 @@ class Overlay:
 
 
 class Window:
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, fullscreen: bool = False) -> None:
         self.title = title
+        self.fullscreen = fullscreen
         self._opened = False
 
     def show(self, image: np.ndarray) -> None:
         if not self._opened:
-            cv2.namedWindow(self.title, cv2.WINDOW_AUTOSIZE)
+            if self.fullscreen:
+                cv2.namedWindow(self.title, cv2.WINDOW_NORMAL)
+                cv2.setWindowProperty(self.title, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            else:
+                cv2.namedWindow(self.title, cv2.WINDOW_AUTOSIZE)
             self._opened = True
         cv2.imshow(self.title, image)
 

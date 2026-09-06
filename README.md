@@ -114,6 +114,10 @@ the lead is back.
 ### Options worth knowing
 
 - `--left-handed` swaps the strum and fist hands.
+- `--torch` for a dark room: the window goes white and fullscreen with the
+  tracking drawn on it and the camera view in a corner, so the screen itself
+  lights your hands. Measured at night: the screen is the difference between
+  a tracked hand and none.
 - `--low-light` for a dim room: holds the camera at 30 fps instead of letting
   it slow down, raises sensor gain, brightens frames before tracking and
   loosens MediaPipe's confidences. Light on your hands still beats it: in the

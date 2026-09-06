@@ -143,6 +143,7 @@ class Config:
     mode: str = "guitar"  # guitar | piano
     progression: str = ""
     ui: str = "auto"  # auto | window | terminal | none
+    torch: bool = False  # window: white fullscreen so the screen lights the hands; camera as a thumbnail
     record: Path | None = None
     replay: Path | None = None
     replay_realtime: bool = True
