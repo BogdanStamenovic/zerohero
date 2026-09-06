@@ -34,6 +34,9 @@ class GestureConfig:
     velocity_smoothing: float = 0.35
     # Seconds without a detection before a hand's track is dropped.
     lost_after: float = 0.4
+    # A palm jump of more than this many hand widths in one frame is a tracker
+    # glitch (re-acquired somewhere else), not motion: restart the track.
+    teleport_widths: float = 2.5
     # Strum (pick hand, vertical speed, hand widths per second).
     strum_hand: str = "right"
     strum_speed_on: float = 3.5
@@ -54,6 +57,32 @@ class GestureConfig:
     # Vibe meter.
     vibe_window: float = 1.5
     vibe_speed_full: float = 5.0
+
+
+@dataclass
+class PianoConfig:
+    """Piano mode: the hand is the pianist. Speeds in hand widths per second."""
+
+    # Grip = fingers curled as if holding a chord (closed_score hysteresis).
+    grip_on: float = 0.55
+    grip_off: float = 0.35
+    # A hit is a sharp movement onset (any direction) while gripped, or a
+    # vertical/erratic one with an open hand (passage).
+    hit_speed_on: float = 3.0
+    hit_speed_off: float = 1.2
+    hit_speed_full: float = 10.0
+    hit_refractory: float = 0.15
+    # Sweep: open hand moving sideways fires a note per lattice slot crossed.
+    sweep_speed_on: float = 1.5
+    sweep_min_gap: float = 0.03  # never two sweep notes closer than this
+    # Erratic = this many horizontal direction reversals inside the window.
+    erratic_window: float = 0.5
+    erratic_reversals: int = 2
+    # Keyboard span the frame width maps onto (MIDI): C2 .. C6.
+    key_low: int = 36
+    key_high: int = 84
+    # Sweep lattice: chord tones tiled across this many octaves.
+    lattice_octaves: int = 4
 
 
 @dataclass
@@ -99,11 +128,11 @@ class Config:
     lead: bool = False
     lead_transport: str = "tcp"  # tcp | bt
     follow: str | None = None  # auto | host[:port] | bt:ADDR
-    advance: str = "fist"  # fist | auto:N | follow
     verbose: bool = False
     camera: CameraConfig = field(default_factory=CameraConfig)
     gesture: GestureConfig = field(default_factory=GestureConfig)
     music: MusicConfig = field(default_factory=MusicConfig)
+    piano: PianoConfig = field(default_factory=PianoConfig)
     synth: SynthConfig = field(default_factory=SynthConfig)
     link: LinkConfig = field(default_factory=LinkConfig)
 

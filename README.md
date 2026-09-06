@@ -13,27 +13,26 @@ the current chord; a down-stroke strums low to high, an up-stroke high to low,
 and the speed of your hand sets how hard. Make a fist with your left hand to
 move to the next chord.
 
-**Piano.** Same chord list, but you conduct. Hit the air with either hand and
-a phrase that fits the current chord plays. The direction of the hit picks the
-phrase, the hand picks the register, and how much you are moving overall sets
-the dynamics.
+**Piano.** The piano goes with the guitar: it plays whatever chord the
+guitar is on and never changes it. Your hands are the pianist. Where your
+hand is across the frame is where you are on the keyboard, left is low,
+right is high. What the hand does decides what plays:
 
-| hit direction | phrase |
+| the hand | what plays |
 |---|---|
-| left | block chord |
-| right | arpeggio upward |
-| down | bass octave plus chord |
-| up | run up the chord scale |
+| hit with a grip, fingers curled like holding a chord | a block chord at that spot, held until you open the hand |
+| open hand sweeping left or right | an arpeggio: the chord's notes are laid across the keyboard and each one plays as your hand passes it, so your speed is the tempo and a fast sweep is a glissando |
+| open hand hitting up or down, or wiggling about | a run through the chord's scale in that direction, longer and faster the harder you hit |
 
-Left hand plays low, right hand plays high. A fist at the moment of the hit
-makes it staccato. The more you move, the fuller the voicings get (7ths, 9ths,
-doubled roots).
+How hard you hit sets the accent. How much you are moving overall sets the
+dynamics and how thick the chords get (7ths, 9ths). Both hands work
+independently, so a left-hand chord can hold under a right-hand sweep.
 
 **Link.** One device runs the guitar as *lead*, the other runs the piano as
-*follower*. The follower's chord changes when the guitar's does, and the
-guitar's strum timing gives the piano a tempo for its arpeggios and, when the
-piano player is idle, a light accompaniment. Works over any network that can
-route TCP (LAN, Tailscale) and, on Linux, over Bluetooth RFCOMM.
+*follower*. The follower's chord changes when the guitar's does. Works over
+any network that can route TCP (LAN, Tailscale) and, on Linux, over
+Bluetooth RFCOMM. Standalone `zerohero piano "Am"` holds a chord for
+practising, with `n`/`p` to step.
 
 ## Install
 
@@ -137,8 +136,7 @@ the lead is back.
   TCP has been tested end to end on loopback. The Python that `install.py`
   provisions through uv is built without Bluetooth sockets, so RFCOMM goes
   through libc via ctypes; `zerohero doctor` tells you which path you have.
-- The piano does not know rhythm beyond what you conduct or what the lead's
-  strums imply. There is no metronome.
+- The piano has no rhythm of its own. It plays when your hand says so.
 - No individual string plucking, no bends, no palm mutes. Strums only.
 
 ## What does not exist yet

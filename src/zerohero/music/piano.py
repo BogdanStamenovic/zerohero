@@ -1,20 +1,18 @@
-"""Piano voicings with voice leading, and Beat -> phrase NoteEvents. See ARCHITECTURE.md > music."""
+"""Piano: the hand is the pianist. See ARCHITECTURE.md "piano".
+
+Three ways to play, all over the chord the guitar is on:
+
+- grip hit      -> block chord voiced around the keyboard position of the hand
+- sweep         -> the chord tones tiled across the keyboard; the hand crossing
+                   a slot plays that tone, so hand speed is the tempo
+- passage       -> a run through the chord's scale from the hand's position
+"""
 
 from __future__ import annotations
 
-import random
-from typing import Literal
-
-from zerohero.config import CH_PIANO, MusicConfig
-from zerohero.events import Beat, NoteEvent
-from zerohero.music.theory import Chord, chord_scale, midi
-
-Register = Literal["low", "high"]
-
-_REGISTER_RANGE: dict[Register, tuple[int, int]] = {
-    "low": (36, 55),  # roughly octaves 2-3
-    "high": (55, 79),  # roughly octaves 4-5
-}
+from zerohero.config import CH_PIANO, MusicConfig, PianoConfig
+from zerohero.events import NoteEvent
+from zerohero.music.theory import Chord, chord_scale
 
 
 def _clip(v: float, lo: float, hi: float) -> float:
@@ -25,133 +23,136 @@ def _lerp(a: float, b: float, t: float) -> float:
     return a + (b - a) * _clip(t, 0.0, 1.0)
 
 
-class PianoVoicer:
-    """Picks inversions that minimise movement from the previous voicing, per register."""
-
-    def __init__(self) -> None:
-        self._memory: dict[Register, list[int]] = {}
-
-    def voicing(self, chord: Chord, register: Register, density: float) -> list[int]:
-        lo, hi = _REGISTER_RANGE[register]
-        tones = {(chord.root + iv) % 12 for iv in chord.intervals}
-        if chord.bass is not None:
-            tones.add(chord.bass)
-
-        if density > 0.35:
-            seventh = 11 if chord.quality in ("maj", "maj7", "maj9", "6") else 10
-            tones.add((chord.root + seventh) % 12)
-        if density > 0.65:
-            tones.add((chord.root + 2) % 12)  # 9th
-
-        prev = self._memory.get(register)
-        # Same target for every tone: cheap approximation of minimal total
-        # movement that works well because chords sharing tones (or close on
-        # the circle of fifths) end up choosing nearby octaves for all of them.
-        target = (sum(prev) / len(prev)) if prev else (lo + hi) / 2
-
-        notes: list[int] = []
-        for pc in sorted(tones):
-            candidates = [n for n in range(lo, hi + 1) if n % 12 == pc]
-            if candidates:
-                notes.append(min(candidates, key=lambda n: abs(n - target)))
-
-        if density > 0.85:
-            root_notes = [n for n in notes if n % 12 == chord.root]
-            if root_notes:
-                r = root_notes[0]
-                if r - 12 >= lo and r - 12 not in notes:
-                    notes.append(r - 12)
-                elif r + 12 <= hi and r + 12 not in notes:
-                    notes.append(r + 12)
-
-        notes = sorted(set(notes))
-        self._memory[register] = notes
-        return notes
-
-
-def _velocity(cfg: MusicConfig, intensity: float, vibe: float) -> float:
+def velocity(cfg: MusicConfig, intensity: float, vibe: float) -> int:
     mix = 0.6 * _clip(intensity, 0.0, 1.0) + 0.4 * _clip(vibe, 0.0, 1.0)
-    return _clip(cfg.velocity_min + (cfg.velocity_max - cfg.velocity_min) * mix, cfg.velocity_min, cfg.velocity_max)
+    return int(round(_clip(cfg.velocity_min + (cfg.velocity_max - cfg.velocity_min) * mix, 1, 127)))
 
 
-def phrase(
-    chord: Chord,
-    beat: Beat,
-    vibe: float,
-    tempo: float | None,
-    voicer: PianoVoicer,
-    cfg: MusicConfig,
+def key_at(x: float, pcfg: PianoConfig) -> int:
+    """Frame x in 0..1 -> MIDI note on the configured keyboard span (left is low)."""
+    return int(round(_lerp(pcfg.key_low, pcfg.key_high, x)))
+
+
+def chord_tones(chord: Chord, density: float) -> list[int]:
+    """Pitch classes of the chord, thickened with 7th and 9th as density rises."""
+    tones = [(chord.root + iv) % 12 for iv in chord.intervals]
+    if density > 0.35:
+        seventh = 11 if chord.quality in ("maj", "maj7", "maj9", "6") else 10
+        pc = (chord.root + seventh) % 12
+        if pc not in tones:
+            tones.append(pc)
+    if density > 0.65:
+        pc = (chord.root + 2) % 12
+        if pc not in tones:
+            tones.append(pc)
+    return tones
+
+
+def voicing_at(chord: Chord, center: int, density: float) -> list[int]:
+    """Closed voicing of the chord whose lowest note sits just below `center`.
+
+    Root at the bottom, other tones stacked upward within an octave, so the
+    shape a real hand would grab at that spot on the keyboard.
+    """
+    tones = chord_tones(chord, density)
+    root = chord.bass if chord.bass is not None else chord.root
+    low = center - ((center - root) % 12)  # highest note <= center with the root's pitch class
+    notes = [low]
+    for pc in tones:
+        if pc == root % 12:
+            continue
+        n = low + ((pc - low) % 12)
+        notes.append(n)
+    return sorted(set(notes))
+
+
+def grip_chord(
+    chord: Chord, x: float, intensity: float, vibe: float, downward: bool, cfg: MusicConfig, pcfg: PianoConfig
 ) -> list[NoteEvent]:
-    register: Register = "low" if beat.hand == "left" else "high"
-    duration = cfg.piano_staccato if beat.closed else cfg.piano_sustain
-    notes = voicer.voicing(chord, register, vibe)
-    velocity = round(_velocity(cfg, beat.intensity, vibe))
-
-    events: list[NoteEvent] = []
-
-    if beat.direction == "left":
-        for n in notes:
-            jitter = random.uniform(0, 0.008)  # tiny per-note humanisation
-            events.append(NoteEvent(offset=jitter, note=n, velocity=velocity, duration=duration, channel=CH_PIANO))
-
-    elif beat.direction == "right":
-        spacing = (60 / tempo / 4) if tempo else _lerp(0.14, 0.05, beat.intensity)
-        for i, n in enumerate(notes):
-            events.append(NoteEvent(offset=i * spacing, note=n, velocity=velocity, duration=duration, channel=CH_PIANO))
-
-    elif beat.direction == "down":
-        heavy_velocity = round(_clip(velocity + 15, cfg.velocity_min, cfg.velocity_max))
-        bass = [midi(chord.root, 2), midi(chord.root, 3)]
-        for n in sorted(set(bass) | set(notes)):
-            events.append(
-                NoteEvent(offset=0.0, note=n, velocity=heavy_velocity, duration=duration, channel=CH_PIANO)
-            )
-
-    else:  # "up": a run up the chord scale, glissando feel
-        scale = set(chord_scale(chord))
-        start = min(notes) if notes else midi(chord.root, 3)
-        span = 18  # ~1.5 octaves
-        run = [n for n in range(start, start + span + 1) if n % 12 in scale]
-        spacing = _lerp(0.06, 0.03, beat.intensity)
-        for i, n in enumerate(run):
-            rising = velocity + (cfg.velocity_max - velocity) * (i / max(1, len(run) - 1))
-            events.append(
-                NoteEvent(
-                    offset=i * spacing,
-                    note=n,
-                    velocity=round(_clip(rising, cfg.velocity_min, cfg.velocity_max)),
-                    duration=duration,
-                    channel=CH_PIANO,
-                )
-            )
-
-    return events
-
-
-def accompaniment(chord: Chord, tempo: float, vibe: float, voicer: PianoVoicer, cfg: MusicConfig) -> list[NoteEvent]:
-    """One bar (4 beats) of comping: bass on 1 & 3, chord on 2 & 4, denser when vibe is high."""
-    beat_dur = 60.0 / tempo
-    velocity_range = cfg.velocity_max - cfg.velocity_min
-    velocity = round(_clip(cfg.velocity_min + velocity_range * vibe, cfg.velocity_min, cfg.velocity_max))
-    ring = beat_dur * 0.9
-
-    bass_note = midi(chord.root, 2)
-    chord_notes = voicer.voicing(chord, "high", vibe)
-
-    events = [
-        NoteEvent(offset=0.0, note=bass_note, velocity=velocity, duration=ring, channel=CH_PIANO),
-        NoteEvent(offset=2 * beat_dur, note=bass_note, velocity=velocity, duration=ring, channel=CH_PIANO),
+    """Block chord at the hand's position. Held by the mode until the grip opens."""
+    center = key_at(x, pcfg)
+    notes = voicing_at(chord, center, vibe)
+    if downward or vibe > 0.85:
+        notes = [notes[0] - 12, *notes]  # weight in the bass, like leaning into it
+    notes = [n for n in notes if 21 <= n <= 108]
+    vel = velocity(cfg, intensity, vibe)
+    if downward:
+        vel = min(127, vel + 10)
+    # Tiny roll so the chord sounds like fingers, not a sequencer.
+    roll = _lerp(0.012, 0.003, intensity)
+    return [
+        NoteEvent(offset=i * roll, note=n, velocity=vel, duration=cfg.piano_sustain * 3, channel=CH_PIANO)
+        for i, n in enumerate(notes)
     ]
-    for n in chord_notes:
-        events.append(NoteEvent(offset=beat_dur, note=n, velocity=velocity, duration=ring, channel=CH_PIANO))
-        events.append(NoteEvent(offset=3 * beat_dur, note=n, velocity=velocity, duration=ring, channel=CH_PIANO))
 
-    if vibe > 0.6:
-        # Denser comping: an extra hit on the "and" of beat 4.
-        off_velocity = round(velocity * 0.8)
-        for n in chord_notes:
-            events.append(
-                NoteEvent(offset=3.5 * beat_dur, note=n, velocity=off_velocity, duration=ring / 2, channel=CH_PIANO)
-            )
 
+def lattice(chord: Chord, vibe: float, pcfg: PianoConfig) -> list[int]:
+    """Chord tones tiled across the keyboard span, ascending. Slot i is the i-th of these."""
+    tones = sorted(chord_tones(chord, vibe))
+    notes = [n for n in range(pcfg.key_low, pcfg.key_high + 1) if n % 12 in tones]
+    return notes
+
+
+def slot_at(x: float, notes: list[int], pcfg: PianoConfig) -> int:
+    """Which lattice slot the hand is over. The keyboard span is shared with key_at."""
+    key = key_at(x, pcfg)
+    best = 0
+    for i, n in enumerate(notes):
+        if n <= key:
+            best = i
+    return best
+
+
+def sweep_note(
+    notes: list[int], slot: int, speed: float, vibe: float, cfg: MusicConfig, pcfg: PianoConfig
+) -> NoteEvent:
+    slot = max(0, min(len(notes) - 1, slot))
+    # Speed is the tempo; it also sets how hard the key is struck.
+    intensity = _clip((speed - pcfg.sweep_speed_on) / (pcfg.hit_speed_full - pcfg.sweep_speed_on), 0.0, 1.0)
+    vel = velocity(cfg, 0.3 + 0.7 * intensity, vibe)
+    duration = _lerp(0.9, 0.25, intensity)  # fast sweeps ring short, like a glissando
+    return NoteEvent(offset=0.0, note=notes[slot], velocity=vel, duration=duration, channel=CH_PIANO)
+
+
+def passage(
+    chord: Chord,
+    x: float,
+    direction: str,
+    intensity: float,
+    vibe: float,
+    erratic: bool,
+    cfg: MusicConfig,
+    pcfg: PianoConfig,
+) -> list[NoteEvent]:
+    """A run through the chord scale from the hand's position, up or down.
+
+    Erratic motion gives a zigzag instead of a straight run.
+    """
+    scale = chord_scale(chord)
+    start = key_at(x, pcfg)
+    steps = 4 + int(round(5 * _clip(intensity, 0, 1)) + round(2 * _clip(vibe, 0, 1)))
+    spacing = _lerp(0.12, 0.045, intensity)
+    step = 1 if direction == "up" else -1
+    run: list[int] = []
+    n = start
+    # Walk semitone by semitone, keeping scale tones, until we have enough.
+    guard = 0
+    while len(run) < steps and guard < 60:
+        guard += 1
+        n += step
+        if n % 12 in scale and 21 <= n <= 108:
+            run.append(n)
+    if erratic and len(run) >= 4:
+        # zigzag: 0 2 1 3 2 4 ... keeps the direction but wobbles
+        zig = []
+        for i in range(len(run)):
+            j = i + 1 if i % 2 == 0 and i + 1 < len(run) else i - 1 if i % 2 == 1 else i
+            zig.append(run[max(0, min(len(run) - 1, j))])
+        run = zig
+    base_vel = velocity(cfg, intensity, vibe)
+    events = []
+    for i, note in enumerate(run):
+        # crescendo into the top of the run
+        v = int(_clip(base_vel * (0.75 + 0.25 * i / max(1, len(run) - 1)), 1, 127))
+        events.append(NoteEvent(offset=i * spacing, note=note, velocity=v, duration=spacing * 2.2, channel=CH_PIANO))
     return events

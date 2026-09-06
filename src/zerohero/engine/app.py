@@ -112,8 +112,7 @@ class App:
                 self.recorder.write(frame)
 
             events = self.pipeline.update(frame)
-            if isinstance(self.mode, PianoMode):
-                self.mode.vibe = self.pipeline.vibe
+            self.mode.observe(self.pipeline, frame)
             for ev in events:
                 self.mode.handle(ev)
             self.mode.tick(frame.t)

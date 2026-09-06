@@ -54,14 +54,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--lead", action="store_true", help="broadcast chords and strums to piano followers")
     g.add_argument("--transport", choices=["tcp", "bt"], default="tcp", help="lead transport")
 
-    pi = sub.add_parser("piano", help="air piano")
+    pi = sub.add_parser("piano", help="air piano, accompanying a guitar session")
     _add_play_args(pi)
-    pi.add_argument("--follow", metavar="TARGET", help="auto | host[:port] | bt:AA:BB:CC:DD:EE:FF")
-    pi.add_argument(
-        "--advance",
-        default=None,
-        help="chord advance: fist (default) | auto:N beats | follow (default when --follow is set)",
-    )
+    pi.add_argument("--follow", metavar="TARGET", help="guitar to follow: auto | host[:port] | bt:AA:BB:CC:DD:EE:FF")
 
     c = sub.add_parser("chords", help="print voicings and play the progression, no camera")
     c.add_argument("progression")
@@ -111,7 +106,6 @@ def _config_from_args(a: argparse.Namespace, mode: str) -> Config:
         cfg.lead_transport = a.transport
     else:
         cfg.follow = a.follow
-        cfg.advance = a.advance or ("follow" if a.follow else "fist")
     return cfg
 
 
@@ -127,7 +121,6 @@ def cmd_chords(a: argparse.Namespace) -> int:
     import time
 
     from zerohero.config import CH_GUITAR, CH_PIANO
-    from zerohero.events import Beat
     from zerohero.music import guitar, piano, theory
     from zerohero.synth import Scheduler, open_synth
 
@@ -144,14 +137,12 @@ def cmd_chords(a: argparse.Namespace) -> int:
         return 0
     synth = open_synth(cfg)
     sched = Scheduler(synth)
-    voicer = piano.PianoVoicer()
     try:
         for c in chords:
             sched.cut(CH_GUITAR)
             sched.play(guitar.strum(c, "down", 0.5, cfg.music))
             time.sleep(0.9)
-            beat = Beat(t=time.monotonic(), hand="right", direction="left", intensity=0.5, closed=False)
-            sched.play(piano.phrase(c, beat, 0.4, None, voicer, cfg.music))
+            sched.play(piano.grip_chord(c, 0.55, 0.5, 0.4, False, cfg.music, cfg.piano))
             time.sleep(1.1)
         time.sleep(1.0)
     finally:

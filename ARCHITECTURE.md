@@ -81,6 +81,7 @@ src/zerohero/
   gestures/conduct.py   BeatDetector (conducting hits)
   gestures/vibe.py      VibeMeter (energy 0..1)
   gestures/pipeline.py  GesturePipeline: Frame -> list[GestureEvent]
+  gestures/pianist.py   per-hand piano detectors: grip hit, sweep, passage
   engine/session.py     progression state
   engine/guitar_mode.py
   engine/piano_mode.py
@@ -105,8 +106,9 @@ See the file. Summary:
 - Gesture events, all frozen dataclasses with `t` and `hand`:
   - `Strum(direction: "down"|"up", intensity: 0..1)` from the pick hand
   - `FistClose`, `FistOpen` edge events
-  - `Beat(direction: "left"|"right"|"up"|"down", intensity: 0..1, closed: bool)`
-    a conducting hit; `closed` is whether the hand was a fist at the hit
+  - `Beat(direction, intensity, closed)` a generic conducting hit (unused by
+    the current piano; kept for experiments)
+  - pianist events `GripHit`, `GripRelease`, `SweepStep`, `Passage` (piano)
 - `NoteEvent(offset, note, velocity, duration, channel)`; `offset` is seconds
   relative to when the phrase is scheduled.
 
@@ -129,22 +131,24 @@ to low, string spacing scales inversely with intensity (fast strum = tight).
 Velocity is `40 + 87 * intensity`. Previous chord notes are cut when a new
 strum starts (the mode handles that via `Scheduler.cut(channel)`).
 
-`piano.PianoVoicer` keeps the last voicing and picks inversions that minimise
-movement (voice leading). `piano.phrase(chord, beat, vibe, tempo)` maps a
-conducting hit to notes:
+### piano
 
-| beat.direction | hand | phrase |
+The piano is accompaniment to a guitar session: the chord comes from the
+linked guitar and gestures never change it. The hand is the pianist.
+`gestures/pianist.py` has one `Pianist` per hand fed every frame from
+`PianoMode.observe()` with the hand's track and its slot on the lattice:
+
+| hand | event | plays |
 |---|---|---|
-| left | any | block chord, the "hit" |
-| right | any | arpeggio upward through the voicing |
-| down | any | bass octave plus chord, heavy |
-| up | any | run up the chord scale (glissando feel) |
+| gripped (fingers curled, `closed_score` hysteresis 0.55/0.35) and a sharp onset | `GripHit(x, intensity, downward)` | `piano.grip_chord`: closed voicing with the root just below the key at `x`, held until `GripRelease` (`Scheduler.release`) |
+| open, moving sideways above `sweep_speed_on`, crossing lattice slots | `SweepStep(slot, direction, speed)` | `piano.sweep_note`: the chord tone at that slot; speed sets velocity and shortens the note |
+| open, sharp vertical onset, or erratic (>= 2 horizontal reversals in 0.5 s) | `Passage(x, direction, intensity, erratic)` | `piano.passage`: a run through `chord_scale` from the key at `x`, zigzag when erratic |
 
-Left hand plays the low register (bass, octaves 2-3), right hand the mid/high
-register (octaves 4-5). `beat.closed` (fist) makes it staccato, open hand
-sustains. `intensity` drives velocity; `vibe` drives density (adds 7ths, 9ths,
-octave doubling as it rises). `tempo` (BPM or `None`) sets arpeggio note
-spacing when known, otherwise spacing derives from intensity.
+"Where on the keyboard" is the hand's x mapped onto MIDI `key_low..key_high`
+(C2..C6), same map for both hands. The lattice is the chord tones tiled
+across that span; `vibe` thickens it with 7th and 9th in three buckets so it
+does not flicker. Accents come from the predicted peak speed of the hit,
+dynamics from `vibe`. Tunables live in `PianoConfig`.
 
 ### synth
 
@@ -155,7 +159,9 @@ back to `basic.NumpySynth` with a warning. Programs: guitar 25 (steel), piano 0.
 
 `Scheduler(synth)`: `play(events, t0=None)` schedules note-ons at
 `t0 + offset` and note-offs at `t0 + offset + duration`; `cut(channel)` cancels
-pending events on a channel and sends all-notes-off; `stop()`.
+pending events on a channel and sends all-notes-off; `release(channel, notes)`
+note-offs just those notes and drops their pending offs (held chords);
+`stop()`.
 
 ### vision
 
@@ -196,9 +202,10 @@ and exposes `.vibe` and `.tracks` for the overlay.
 `Session(progression)`: `current`, `index`, `next()`, `prev()`, `goto(i)`,
 wraps around. `GuitarMode`: `Strum` -> cut guitar channel, play strum of
 `session.current`; `FistClose` on the fret hand -> `session.next()`. Both are
-forwarded to the `Lead` link if attached. `PianoMode`: `Beat` -> play phrase;
-chord advance policy is `fist` (left fist, same as guitar), `auto:N` (every N
-beats) or `follow` (chord comes from the link). `app.run(config)` builds the
+forwarded to the `Lead` link if attached. `PianoMode`: chord from the link
+(`--follow`), never from gestures; `observe(pipeline, frame)` runs the two
+`Pianist` detectors each frame and plays what they emit; `n`/`p` step chords
+standalone for testing. `app.run(config)` builds the
 graph and runs the loop; `q` quits, `n`/`p` step chords, space is a manual
 strum, `r` resets.
 

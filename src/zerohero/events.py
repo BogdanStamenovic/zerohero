@@ -111,6 +111,52 @@ class Beat:
 GestureEvent = Strum | FistClose | FistOpen | Beat
 
 
+# ---- pianist events (piano mode, per hand) --------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class GripHit:
+    """Sharp movement onset while the hand is gripped, as if holding a chord."""
+
+    t: float
+    hand: Side
+    x: float  # palm x in 0..1, where on the keyboard
+    intensity: float  # 0..1
+    downward: bool  # the hit went down: add weight in the bass
+
+
+@dataclass(frozen=True, slots=True)
+class GripRelease:
+    t: float
+    hand: Side
+
+
+@dataclass(frozen=True, slots=True)
+class SweepStep:
+    """An open hand moving sideways crossed the next keyboard slot."""
+
+    t: float
+    hand: Side
+    slot: int  # index into the chord-tone lattice across the keyboard
+    direction: Literal["left", "right"]
+    speed: float  # hand widths per second at the crossing
+
+
+@dataclass(frozen=True, slots=True)
+class Passage:
+    """Open hand hit up or down, or erratic motion: a run through the chord scale."""
+
+    t: float
+    hand: Side
+    x: float
+    direction: Literal["up", "down"]
+    intensity: float
+    erratic: bool
+
+
+PianistEvent = GripHit | GripRelease | SweepStep | Passage
+
+
 # ---- music ---------------------------------------------------------------
 
 

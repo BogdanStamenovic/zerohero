@@ -1,11 +1,12 @@
-"""Piano: conducting hits become phrases over the current chord.
+"""Piano: accompaniment to a guitar session. The hand is the pianist.
 
-Chord advance policy (`cfg.advance`):
-  fist    left fist steps to the next chord, same gesture as guitar mode
-  auto:N  every N beats the chord advances by itself
-  follow  the chord comes from a linked guitar device; when the guitar is
-          strumming and the user here is idle, a light accompaniment keeps
-          time using the lead's tempo
+The chord comes from the linked guitar (`--follow`) and gestures never change
+it. Standalone, the progression given on the command line is held and only
+the n/p keys step through it, for testing.
+
+Per hand, every frame (`observe`), the `Pianist` detector turns the track into
+grip hits, grip releases, sweep steps and passages; this class turns those
+into notes. A gripped chord is held until the grip opens.
 """
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ from collections.abc import Callable
 
 from zerohero.config import CH_PIANO, Config
 from zerohero.engine.session import Session
-from zerohero.events import Beat, FistClose, FistOpen, GestureEvent, Strum
+from zerohero.events import Frame, GestureEvent, GripHit, GripRelease, Passage, Side, SweepStep
+from zerohero.gestures.pianist import Pianist
+from zerohero.gestures.pipeline import GesturePipeline
 from zerohero.music import piano
 from zerohero.synth import Scheduler
 
@@ -31,81 +34,86 @@ class PianoMode:
         self.session = session
         self.scheduler = scheduler
         self.follower = follower  # link.Follower or None
-        self.voicer = piano.PianoVoicer()
         self.vibe = 0.0
         self.on_event: Callable[[str], None] | None = None
-        self.beats = 0
-        self.auto_every = 0
-        if cfg.advance.startswith("auto:"):
-            self.auto_every = max(1, int(cfg.advance.split(":", 1)[1]))
-        self.last_beat_t = 0.0
-        self._next_bar_t: float | None = None
+        self.pianists: dict[Side, Pianist] = {s: Pianist(s, cfg.piano) for s in ("left", "right")}
+        self.held: dict[Side, list[int]] = {"left": [], "right": []}
+        self._lattice: list[int] = []
+        self._lattice_key: tuple[str, int] | None = None
         if follower is not None:
             follower.on_chord = self._on_remote_chord
-            follower.on_strum = self._on_remote_strum
             follower.on_connect = lambda: self._flash("linked")
             follower.on_disconnect = lambda: self._flash("link lost")
 
-    # ---- gestures --------------------------------------------------------
+    # ---- per frame -------------------------------------------------------
+
+    def observe(self, pipeline: GesturePipeline, frame: Frame) -> None:
+        self.vibe = pipeline.vibe
+        notes = self.lattice()
+        for side, pianist in self.pianists.items():
+            track = pipeline.tracks[side]
+            slot = piano.slot_at(track.palm[0], notes, self.cfg.piano) if track.present else None
+            for ev in pianist.update(track, frame.t, slot):
+                self.pianist_event(ev)
+
+    def lattice(self) -> list[int]:
+        # Density buckets keep the lattice stable while vibe wobbles.
+        key = (self.session.current.symbol, int(self.vibe * 3))
+        if key != self._lattice_key:
+            self._lattice = piano.lattice(self.session.current, self.vibe, self.cfg.piano)
+            self._lattice_key = key
+        return self._lattice
 
     def handle(self, ev: GestureEvent) -> None:
-        if isinstance(ev, Beat):
-            self.beat(ev)
-        elif isinstance(ev, FistClose) and ev.hand == self.cfg.gesture.fist_hand and self.cfg.advance == "fist":
-            self.next_chord()
-        elif isinstance(ev, (FistOpen, Strum)):
-            pass
+        """Generic gesture events (strum, fist, beat) mean nothing on the piano."""
 
-    def beat(self, ev: Beat) -> None:
-        tempo = self.follower.tempo if self.follower is not None else None
-        events = piano.phrase(self.session.current, ev, self.vibe, tempo, self.voicer, self.cfg.music)
-        # Only the same hand's register is cut, so a left-hand bass can ring under right-hand hits.
-        self.scheduler.play(events)
-        self.beats += 1
-        self.last_beat_t = ev.t
-        self._flash(f"{ev.hand[0].upper()} {ev.direction} {ev.intensity:.2f}{' fist' if ev.closed else ''}")
-        if self.auto_every and self.beats % self.auto_every == 0:
-            self.next_chord()
+    def pianist_event(self, ev: GripHit | GripRelease | SweepStep | Passage) -> None:
+        cfg = self.cfg
+        chord = self.session.current
+        if isinstance(ev, GripHit):
+            self._release(ev.hand)
+            events = piano.grip_chord(chord, ev.x, ev.intensity, self.vibe, ev.downward, cfg.music, cfg.piano)
+            self.held[ev.hand] = [e.note for e in events]
+            self.scheduler.play(events)
+            self._flash(f"{ev.hand[0].upper()} chord {chord.symbol} @{ev.x:.2f} {ev.intensity:.2f}")
+        elif isinstance(ev, GripRelease):
+            self._release(ev.hand)
+        elif isinstance(ev, SweepStep):
+            note = piano.sweep_note(self.lattice(), ev.slot, ev.speed, self.vibe, cfg.music, cfg.piano)
+            self.scheduler.play([note])
+            self._flash(f"{ev.hand[0].upper()} sweep {ev.direction} {note.note}")
+        elif isinstance(ev, Passage):
+            events = piano.passage(chord, ev.x, ev.direction, ev.intensity, self.vibe, ev.erratic, cfg.music, cfg.piano)
+            self.scheduler.play(events)
+            self._flash(f"{ev.hand[0].upper()} run {ev.direction}{' zigzag' if ev.erratic else ''} {ev.intensity:.2f}")
 
-    def next_chord(self) -> None:
-        self.session.next()
-        self._flash(f"-> {self.session.current.symbol}")
+    def _release(self, hand: Side) -> None:
+        if self.held[hand]:
+            self.scheduler.release(CH_PIANO, self.held[hand])
+            self.held[hand] = []
+
+    # ---- keys and link ---------------------------------------------------
 
     def key(self, k: str) -> None:
         if k == "n":
-            self.next_chord()
+            self.session.next()
+            self._flash(f"-> {self.session.current.symbol}")
         elif k == "p":
             self.session.prev()
+            self._flash(f"-> {self.session.current.symbol}")
         elif k == " ":
-            self.beat(Beat(t=time.monotonic(), hand="right", direction="left", intensity=0.6, closed=False))
+            self.pianist_event(GripHit(t=time.monotonic(), hand="right", x=0.6, intensity=0.6, downward=False))
         elif k == "r":
             self.session.reset()
-            self.voicer = piano.PianoVoicer()
-
-    # ---- link ------------------------------------------------------------
+            for side in ("left", "right"):
+                self._release(side)
 
     def _on_remote_chord(self, index: int, symbol: str, t_local: float) -> None:
         self.session.set_symbol(index, symbol)
-        self._flash(f"lead -> {symbol}")
-
-    def _on_remote_strum(self, direction: str, intensity: float, t_local: float) -> None:
-        pass  # tempo is derived inside the follower; nothing to play per strum
+        self._flash(f"guitar -> {symbol}")
 
     def tick(self, t: float) -> None:
-        """Accompaniment when following: play a bar on the lead's tempo while the user is idle."""
-        if self.follower is None or self.cfg.advance != "follow":
-            return
-        tempo = self.follower.tempo
-        if tempo is None or t - self.last_beat_t < 2.0:
-            self._next_bar_t = None
-            return
-        if self._next_bar_t is None:
-            self._next_bar_t = t
-        if t >= self._next_bar_t:
-            bar = piano.accompaniment(self.session.current, tempo, self.vibe, self.voicer, self.cfg.music)
-            self.scheduler.cut(CH_PIANO)
-            self.scheduler.play(bar, t0=self._next_bar_t)
-            self._next_bar_t += 4 * 60.0 / tempo
+        """Nothing periodic: the hand decides when to play."""
 
     def status(self) -> str:
         if self.follower is None:
@@ -113,8 +121,7 @@ class PianoMode:
         if not self.follower.connected:
             return "link: connecting"
         tempo = self.follower.tempo
-        rtt = self.follower.rtt_ms
-        return f"link: {tempo:.0f} bpm" if tempo else "link: ok" + (f" {rtt:.0f}ms" if rtt else "")
+        return f"link: guitar {tempo:.0f} bpm" if tempo else "link: guitar"
 
     def _flash(self, text: str) -> None:
         if self.on_event:

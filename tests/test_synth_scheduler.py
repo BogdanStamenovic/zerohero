@@ -86,3 +86,28 @@ def test_stop_joins_thread() -> None:
     sched = Scheduler(synth)
     sched.stop()
     assert not sched._thread.is_alive()
+
+
+def test_release_drops_only_named_notes_and_their_pending_offs():
+    from zerohero.config import CH_PIANO
+    from zerohero.events import NoteEvent
+    from zerohero.synth import NullSynth, Scheduler
+
+    synth = NullSynth()
+    sched = Scheduler(synth)
+    try:
+        sched.play(
+            [
+                NoteEvent(0.0, 60, 90, 5.0, CH_PIANO),
+                NoteEvent(0.0, 64, 90, 5.0, CH_PIANO),
+                NoteEvent(0.0, 72, 90, 5.0, CH_PIANO),
+            ]
+        )
+        sched.release(CH_PIANO, [60, 64])
+        offs = [c for c in synth.calls if c[0] == "note_off"]
+        assert sorted(c[2] for c in offs) == [60, 64]
+        with sched._cond:
+            pending = [t.note for t in sched._heap]
+        assert pending == [72]
+    finally:
+        sched.stop()

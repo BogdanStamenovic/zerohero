@@ -71,6 +71,9 @@ class GuitarMode:
         elif k == "r":
             self.goto(0)
 
+    def observe(self, pipeline, frame) -> None:
+        """Per-frame hook; guitar only needs the discrete events."""
+
     def tick(self, t: float) -> None:
         """Called once per frame; nothing periodic in guitar mode."""
 

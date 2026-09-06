@@ -20,6 +20,7 @@ class _Task:
     seq: int
     channel: int = field(compare=False)
     action: Callable[[], None] = field(compare=False)
+    note: int | None = field(default=None, compare=False)
 
 
 class Scheduler:
@@ -57,8 +58,8 @@ class Scheduler:
                 if use_now and ev.offset == 0:
                     fire_now.append((ev.channel, ev.note, ev.velocity))
                 else:
-                    self._push(on_time, ev.channel, _note_on(self._synth, ev.channel, ev.note, ev.velocity))
-                self._push(off_time, ev.channel, _note_off(self._synth, ev.channel, ev.note))
+                    self._push(on_time, ev.channel, _note_on(self._synth, ev.channel, ev.note, ev.velocity), ev.note)
+                self._push(off_time, ev.channel, _note_off(self._synth, ev.channel, ev.note), ev.note)
             self._cond.notify_all()
         for channel, note, velocity in fire_now:
             self._synth.note_on(channel, note, velocity)
@@ -70,6 +71,16 @@ class Scheduler:
             heapq.heapify(self._heap)
             self._cond.notify_all()
         self._synth.all_notes_off(channel)
+
+    def release(self, channel: int, notes: list[int]) -> None:
+        """Note-off these notes now and drop their pending note-offs; other notes keep ringing."""
+        wanted = set(notes)
+        with self._cond:
+            self._heap = [t for t in self._heap if not (t.channel == channel and t.note in wanted)]
+            heapq.heapify(self._heap)
+            self._cond.notify_all()
+        for n in notes:
+            self._synth.note_off(channel, n)
 
     def panic(self) -> None:
         """Cancel everything pending and silence both channels."""
@@ -85,8 +96,8 @@ class Scheduler:
             self._cond.notify_all()
         self._thread.join()
 
-    def _push(self, when: float, channel: int, action: Callable[[], None]) -> None:
-        heapq.heappush(self._heap, _Task(when, next(self._seq), channel, action))
+    def _push(self, when: float, channel: int, action: Callable[[], None], note: int | None = None) -> None:
+        heapq.heappush(self._heap, _Task(when, next(self._seq), channel, action, note))
 
     def _run(self) -> None:
         with self._cond:

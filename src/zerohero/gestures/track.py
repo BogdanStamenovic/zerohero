@@ -60,10 +60,13 @@ class HandTrack:
             prev_palm = self.palm
             self._smoothed_width = alpha * self._smoothed_width + (1 - alpha) * features.width
             width_for_norm = self._smoothed_width if self._smoothed_width > 1e-6 else features.width
-            raw_vx = (features.palm[0] - prev_palm[0]) / dt / width_for_norm
-            raw_vy = (features.palm[1] - prev_palm[1]) / dt / width_for_norm
-            old_vx, old_vy = self.velocity
-            self.velocity = (alpha * old_vx + (1 - alpha) * raw_vx, alpha * old_vy + (1 - alpha) * raw_vy)
+            dx = (features.palm[0] - prev_palm[0]) / width_for_norm
+            dy = (features.palm[1] - prev_palm[1]) / width_for_norm
+            if math.hypot(dx, dy) > self.cfg.teleport_widths:
+                self.velocity = (0.0, 0.0)  # glitch, not motion: restart from rest
+            else:
+                old_vx, old_vy = self.velocity
+                self.velocity = (alpha * old_vx + (1 - alpha) * dx / dt, alpha * old_vy + (1 - alpha) * dy / dt)
             self.last_t = t
 
         self.speed = math.hypot(*self.velocity)
