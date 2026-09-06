@@ -26,6 +26,14 @@ class CameraConfig:
     max_hands: int = 2
     min_detection_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
+    min_presence_confidence: float = 0.5
+    # Low-light help. Webcams in room light stretch the exposure and drop the
+    # frame rate, which blurs a fast hand and starves the tracker. gain boosts
+    # the sensor, fixed_fps stops the camera slowing down (Linux, v4l2), and
+    # gamma < 1 brightens frames in software before tracking.
+    gain: int | None = None
+    fixed_fps: bool = False
+    gamma: float = 1.0
 
 
 @dataclass

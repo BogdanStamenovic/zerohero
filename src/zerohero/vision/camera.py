@@ -22,6 +22,18 @@ class CameraError(Exception):
     """The camera device could not be opened or produced no frame in time."""
 
 
+def _v4l2_set(index: int, *controls: str) -> None:
+    """Best effort: v4l2-ctl exists on most Linux boxes; silently skip elsewhere."""
+    import shutil
+    import subprocess
+
+    tool = shutil.which("v4l2-ctl")
+    if not tool:
+        return
+    for c in controls:
+        subprocess.run([tool, "-d", f"/dev/video{index}", "-c", c], check=False, capture_output=True)
+
+
 class Camera:
     def __init__(self, cfg: CameraConfig) -> None:
         self.cfg = cfg
@@ -34,6 +46,15 @@ class Camera:
         self._thread: threading.Thread | None = None
         self._fps_ema = 0.0
         self._last_read_t: float | None = None
+
+    def _apply_low_light(self, cap: cv2.VideoCapture) -> None:
+        cfg = self.cfg
+        if cfg.gain is not None:
+            cap.set(cv2.CAP_PROP_GAIN, cfg.gain)
+            if sys.platform.startswith("linux"):
+                _v4l2_set(cfg.index, f"gain={cfg.gain}")
+        if cfg.fixed_fps and sys.platform.startswith("linux"):
+            _v4l2_set(cfg.index, "exposure_dynamic_framerate=0")
 
     def start(self) -> None:
         # V4L2 is the backend that actually honours FOURCC/size/fps requests
@@ -50,6 +71,7 @@ class Camera:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cfg.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cfg.height)
         cap.set(cv2.CAP_PROP_FPS, self.cfg.fps)
+        self._apply_low_light(cap)
 
         deadline = time.monotonic() + _OPEN_TIMEOUT
         ok, frame = False, None

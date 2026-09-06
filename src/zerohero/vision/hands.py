@@ -35,8 +35,13 @@ class HandTracker:
             running_mode=mp_vision.RunningMode.VIDEO,
             num_hands=cfg.max_hands,
             min_hand_detection_confidence=cfg.min_detection_confidence,
+            min_hand_presence_confidence=cfg.min_presence_confidence,
             min_tracking_confidence=cfg.min_tracking_confidence,
         )
+        self._gamma_lut = None
+        if abs(cfg.gamma - 1.0) > 1e-3:
+            table = [min(255, int((i / 255.0) ** cfg.gamma * 255 + 0.5)) for i in range(256)]
+            self._gamma_lut = np.array(table, np.uint8)
         self._landmarker = mp_vision.GestureRecognizer.create_from_options(options)
         self._last_ms = -1
         self._last_palms: list[tuple[Side, float]] = []
@@ -68,6 +73,8 @@ class HandTracker:
 
     def process(self, bgr: np.ndarray, t: float) -> Frame:
         image = cv2.flip(bgr, 1) if self.cfg.mirror else bgr
+        if self._gamma_lut is not None:
+            image = cv2.LUT(image, self._gamma_lut)  # the overlay shows the brightened frame too
         rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 

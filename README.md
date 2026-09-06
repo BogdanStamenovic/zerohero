@@ -114,6 +114,10 @@ the lead is back.
 ### Options worth knowing
 
 - `--left-handed` swaps the strum and fist hands.
+- `--low-light` for a dim room: holds the camera at 30 fps instead of letting
+  it slow down, raises sensor gain, brightens frames before tracking and
+  loosens MediaPipe's confidences. Light on your hands still beats it: in the
+  dark the webcam smears a fast hand and the tracker drops it.
 - `--record file.jsonl` saves the hand landmarks; `--replay file.jsonl` runs
   the whole pipeline from that file without a camera. Useful for tuning.
 - `--synth basic` forces the numpy synth, `--synth none` mutes.

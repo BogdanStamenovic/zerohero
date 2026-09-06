@@ -39,6 +39,11 @@ def _add_play_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--soundfont", type=Path, help="path to an .sf2/.sf3 for fluidsynth")
     p.add_argument("--audio-driver", help="fluidsynth audio driver (pulseaudio, alsa, coreaudio, dsound)")
     p.add_argument("--left-handed", action="store_true", help="strum with the left hand, fist with the right")
+    p.add_argument(
+        "--low-light",
+        action="store_true",
+        help="dim room: fixed 30 fps, sensor gain up, brighten frames before tracking, looser confidences",
+    )
     p.add_argument("--name", help="device name shown to linked peers")
     p.add_argument("--port", type=int, help="link TCP port (default 47475)")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -71,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     cal = sub.add_parser("calibrate", help="show the camera with gesture readouts, print events")
     cal.add_argument("--camera", type=int)
     cal.add_argument("--no-mirror", action="store_true")
+    cal.add_argument("--low-light", action="store_true")
     cal.add_argument("--ui", choices=["auto", "window", "terminal", "none"], default="auto")
     cal.add_argument("--no-window", action="store_true", help="same as --ui terminal")
     cal.add_argument("-v", "--verbose", action="store_true")
@@ -97,6 +103,13 @@ def _config_from_args(a: argparse.Namespace, mode: str) -> Config:
         cfg.synth.audio_driver = a.audio_driver
     if a.left_handed:
         cfg.gesture.strum_hand, cfg.gesture.fist_hand = "left", "right"
+    if a.low_light:
+        cfg.camera.gain = 8
+        cfg.camera.fixed_fps = True
+        cfg.camera.gamma = 0.5
+        cfg.camera.min_detection_confidence = 0.3
+        cfg.camera.min_tracking_confidence = 0.3
+        cfg.camera.min_presence_confidence = 0.3
     if a.name:
         cfg.link.name = a.name
     if a.port:
@@ -179,6 +192,10 @@ def cmd_calibrate(a: argparse.Namespace) -> int:
         cfg.camera.index = a.camera
     if a.no_mirror:
         cfg.camera.mirror = False
+    if a.low_light:
+        cfg.camera.gain, cfg.camera.fixed_fps, cfg.camera.gamma = 8, True, 0.5
+        cfg.camera.min_detection_confidence = cfg.camera.min_tracking_confidence = 0.3
+        cfg.camera.min_presence_confidence = 0.3
     cfg.ui = "terminal" if a.no_window else a.ui
     cfg.verbose = a.verbose
     return run_calibrate(cfg)
