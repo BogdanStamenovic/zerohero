@@ -140,6 +140,8 @@ the lead is back.
   provisions through uv is built without Bluetooth sockets, so RFCOMM goes
   through libc via ctypes; `zerohero doctor` tells you which path you have.
 - The piano has no rhythm of its own. It plays when your hand says so.
+- Wiggle gently. MediaPipe loses the hand entirely when the fingers flutter
+  hard at this frame rate; a relaxed wiggle stays tracked and plays.
 - No individual string plucking, no bends, no palm mutes. Strums only.
 
 ## What does not exist yet
