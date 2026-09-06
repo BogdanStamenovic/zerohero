@@ -21,6 +21,23 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _log_to_file() -> None:
+    """The terminal view owns stdout/stderr; log lines would tear the canvas."""
+    import os
+    from pathlib import Path
+
+    base = os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state"
+    path = Path(base) / "zerohero" / "zerohero.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    root = logging.getLogger()
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    handler = logging.FileHandler(path)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
+    root.addHandler(handler)
+    log.info("terminal view active, logging to %s", path)
+
+
 class App:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -73,6 +90,8 @@ class App:
         from zerohero.ui.view import open_view
 
         self.view = open_view(cfg, f"zerohero {cfg.mode}")
+        if self.view is not None and type(self.view).__name__ == "TerminalView":
+            _log_to_file()
         log.info("%s mode, progression %s", cfg.mode, " ".join(self.session.symbols))
         try:
             self._loop()

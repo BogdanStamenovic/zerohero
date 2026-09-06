@@ -118,7 +118,8 @@ the lead is back.
   the whole pipeline from that file without a camera. Useful for tuning.
 - `--synth basic` forces the numpy synth, `--synth none` mutes.
 - `--ui auto|window|terminal|none` chooses the view; `--no-window` is
-  shorthand for the terminal view.
+  shorthand for the terminal view. While the terminal view is up, log lines
+  go to `~/.local/state/zerohero/zerohero.log` instead of the screen.
 - Thresholds live in `~/.config/zerohero/config.toml`; every field of
   `Config` in `src/zerohero/config.py` can be set there.
 
@@ -126,8 +127,8 @@ the lead is back.
 
 - Latency from gesture to sound is 60-80 ms on a 2022 laptop CPU. Playable,
   not tight. Bluetooth headphones add 100-200 ms more; use wired audio.
-- The tracker runs at 20-25 fps. Very fast strums (more than about 6 per
-  second) start to merge.
+- The tracker runs at 15-20 fps on the dev laptop's CPU. Very fast strums
+  (more than about 5 per second) start to merge.
 - Handedness comes from MediaPipe and is right nearly always, but crossing
   your hands confuses it.
 - The Bluetooth transport has not been tested between two real devices yet.
@@ -145,8 +146,9 @@ the lead is back.
 - A single-device mode with both instruments.
 - Other instruments (the synth is General MIDI, so this is mostly a UI
   problem).
-- macOS and Windows have not been run; the code avoids Linux-only calls
-  except for Bluetooth, but nobody has pressed the button.
+- macOS and Windows have not been run. The code has Windows paths for the
+  camera backend, key input and the terminal escapes, and the installer is
+  written for all three, but nobody has pressed the button yet.
 
 ## Architecture
 
