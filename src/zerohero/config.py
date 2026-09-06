@@ -68,10 +68,14 @@ class PianoConfig:
     grip_off: float = 0.35
     # A hit is a sharp movement onset (any direction) while gripped, or a
     # vertical/erratic one with an open hand (passage).
-    hit_speed_on: float = 3.0
-    hit_speed_off: float = 1.2
-    hit_speed_full: float = 10.0
+    # Measured live: deliberate hits peak at 6-20 hand widths/s, casual moves at 1-3.
+    hit_speed_on: float = 4.0
+    hit_speed_off: float = 1.5
+    hit_speed_full: float = 14.0
     hit_refractory: float = 0.15
+    # An open-hand passage needs a clearly faster predicted peak than a grip hit,
+    # because an open hand moving around is the normal state between gestures.
+    passage_speed_on: float = 6.0
     # Sweep: open hand moving sideways fires a note per lattice slot crossed.
     sweep_speed_on: float = 1.5
     sweep_min_gap: float = 0.03  # never two sweep notes closer than this

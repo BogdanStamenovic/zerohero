@@ -53,8 +53,8 @@ python3 install.py
 
 `install.py` creates a Python 3.12 virtualenv (through `uv` if present, which
 downloads 3.12 on its own), installs the package, and downloads two assets into
-`~/.local/share/zerohero`: MediaPipe's hand landmarker model (8 MB) and the
-GeneralUser GS soundfont (32 MB).
+`~/.local/share/zerohero`: MediaPipe's hand gesture recognizer model (8 MB,
+landmarks plus fist/palm labels) and the GeneralUser GS soundfont (32 MB).
 
 System dependency: `libfluidsynth` (Arch `fluidsynth`, Debian
 `libfluidsynth3`, macOS `brew install fluid-synth`). Without it a built-in
@@ -128,8 +128,10 @@ the lead is back.
   not tight. Bluetooth headphones add 100-200 ms more; use wired audio.
 - The tracker runs at 15-20 fps on the dev laptop's CPU. Very fast strums
   (more than about 5 per second) start to merge.
-- Handedness comes from MediaPipe and is right nearly always, but crossing
-  your hands confuses it.
+- Which hand is which is decided by position, because MediaPipe's own
+  left/right label flips when it sees the back of your hand. Sit centred:
+  the hand further left in the mirror is your left. Crossing your hands
+  confuses it.
 - The Bluetooth transport has not been tested between two real devices yet.
   On the dev laptop it binds and listens on RFCOMM channel 3 and a connect
   to a bogus address fails cleanly, and that is as far as one machine gets.

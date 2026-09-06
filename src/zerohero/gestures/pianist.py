@@ -87,7 +87,7 @@ class Pianist:
                 self._hit_locked = True
                 self._last_hit_t = t
                 out.append(GripHit(t=t, hand=self.side, x=track.palm[0], intensity=intensity, downward=vy > 0))
-            elif vertical or erratic:
+            elif (vertical or erratic) and peak >= cfg.passage_speed_on:
                 self._hit_locked = True
                 self._last_hit_t = t
                 out.append(

@@ -32,6 +32,7 @@ from zerohero.events import (
 # Fingers must be this fraction farther from the wrist (tip vs. PIP) to count
 # as extended. Without a margin, a nearly-straight-but-relaxed finger flickers
 # across the boundary every frame.
+_GESTURE_MIN_SCORE = 0.5
 _EXTEND_MARGIN = 1.05
 
 _NON_THUMB_TIPS_PIPS = (
@@ -79,6 +80,17 @@ class HandFeatures:
                 curled += 1
 
         closed_score = curled / len(_NON_THUMB_TIPS_PIPS)
+        # The recognizer's label beats geometry: a flat hand pointing at the
+        # camera collapses in projection and reads as curled. "None" (unsure,
+        # common mid-motion) maps to 0.5 so hysteresis holds the last state
+        # instead of releasing a grip in the middle of a hit.
+        if hand.gesture_score >= _GESTURE_MIN_SCORE:
+            if hand.gesture == "Closed_Fist":
+                closed_score = 1.0
+            elif hand.gesture != "None":
+                closed_score = 0.0
+            else:
+                closed_score = 0.5
 
         index_e, middle_e, ring_e, pinky_e = finger_flags
         extended = (thumb_extended, index_e, middle_e, ring_e, pinky_e)

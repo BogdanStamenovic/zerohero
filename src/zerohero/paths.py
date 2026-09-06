@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-HAND_MODEL_NAME = "hand_landmarker.task"
+HAND_MODEL_NAME = "gesture_recognizer.task"  # landmarks + fist/palm labels in one model
 SOUNDFONT_NAME = "GeneralUser-GS.sf2"
 
 

@@ -41,11 +41,18 @@ on top; use wired output when playing.
 
 ## Coordinate conventions
 
-- The camera image is **mirrored** (`cv2.flip(frame, 1)`) before tracking.
-  The window looks like a mirror, and MediaPipe's handedness labels, which
-  assume a selfie camera, become correct without swapping.
-  `Hand.side` is therefore the **user's** hand. `--no-mirror` turns the flip
-  off for cameras that already mirror; handedness is then swapped in code.
+- The camera image is **mirrored** (`cv2.flip(frame, 1)`) before tracking so
+  the window looks like a mirror. `Hand.side` is assigned by **position**,
+  not by MediaPipe's handedness label: that label is the chirality of the 2D
+  projection and flips when the user shows the back of the hand, which a
+  strumming or conducting hand does constantly. Two hands: smaller x is
+  "left". One hand: keeps the side it had last frame (nearest previous
+  palm), else splits at the centre. `--no-mirror` only turns the flip off.
+- Hand shape comes from the gesture recognizer's label (`Hand.gesture`:
+  Closed_Fist, Open_Palm, ...), not from landmark geometry, which cannot
+  tell a flat hand pointing at the camera from a fist. `closed_score` is
+  1 for a confident fist, 0 for any other confident label, 0.5 when unsure
+  so detector hysteresis holds.
 - Landmark `x`, `y` are normalised to `0..1`, `y` grows downward.
   After mirroring, `+x` is the user's right.
   "Hit toward the left" means palm velocity `vx < 0`.
@@ -71,7 +78,7 @@ src/zerohero/
   synth/basic.py    numpy + sounddevice fallback (Karplus-Strong, additive piano)
   synth/scheduler.py timed NoteEvent player
   vision/camera.py  capture thread
-  vision/hands.py   MediaPipe wrapper -> Frame
+  vision/hands.py   MediaPipe gesture recognizer wrapper -> Frame (landmarks + fist/palm label)
   vision/replay.py  JSONL record + replay of Frames (no camera needed)
   vision/source.py  FrameSource protocol, CameraSource, ReplaySource
   gestures/features.py  per-hand features from landmarks
@@ -259,7 +266,7 @@ stdout is a tty, else nothing.
   landmarker creation on the dev laptop; 0.10.x on 3.12 works. `install.py`
   uses `uv` to provision 3.12 when present, else expects `python3.12`.
 - Assets live in `$XDG_DATA_HOME/zerohero` (default `~/.local/share/zerohero`):
-  `hand_landmarker.task` (7.8 MB, Google) and `GeneralUser-GS.sf2` (32 MB,
+  `gesture_recognizer.task` (8.4 MB, Google) and `GeneralUser-GS.sf2` (32 MB,
   GitHub mrbumpy409). `zerohero setup` downloads them; `install.py` calls it.
 - System dependency: `libfluidsynth` (Arch `fluidsynth`, Debian
   `libfluidsynth3`, brew `fluid-synth`). Without it the numpy synth is used.

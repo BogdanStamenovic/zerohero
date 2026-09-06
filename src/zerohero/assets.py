@@ -27,11 +27,11 @@ class Asset:
 def assets() -> list[Asset]:
     return [
         Asset(
-            name="hand landmarker model",
+            name="hand gesture recognizer model",
             path=hand_model_path(),
             urls=(
-                "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-                "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task",
+                "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
             ),
             min_bytes=5_000_000,
         ),

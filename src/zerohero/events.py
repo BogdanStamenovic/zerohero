@@ -33,12 +33,18 @@ class Hand:
     score: float
     landmarks: list[Landmark]  # 21, normalised image coords, y down
     world: list[Landmark] | None = None  # metres, hand-centred, optional
+    # MediaPipe gesture recognizer label: Closed_Fist, Open_Palm, Pointing_Up,
+    # Thumb_Up, Thumb_Down, Victory, ILoveYou, or None when unsure.
+    gesture: str = "None"
+    gesture_score: float = 0.0
 
     def to_json(self) -> dict[str, Any]:
         return {
             "side": self.side,
             "score": self.score,
             "lm": [[p.x, p.y, p.z] for p in self.landmarks],
+            "g": self.gesture,
+            "gs": round(self.gesture_score, 3),
         }
 
     @classmethod
@@ -47,6 +53,8 @@ class Hand:
             side=d["side"],
             score=float(d.get("score", 1.0)),
             landmarks=[Landmark(*p) for p in d["lm"]],
+            gesture=d.get("g", "None"),
+            gesture_score=float(d.get("gs", 0.0)),
         )
 
 

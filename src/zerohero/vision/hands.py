@@ -1,4 +1,9 @@
-"""MediaPipe HandLandmarker wrapper: BGR frame + timestamp -> Frame.
+"""MediaPipe GestureRecognizer wrapper: BGR frame + timestamp -> Frame.
+
+The gesture recognizer is the hand landmarker plus a small classifier that
+labels each hand (Closed_Fist, Open_Palm, ...). Landmark geometry alone could
+not tell a flat hand pointing at the camera from a fist in live recordings,
+the trained label can, and it costs nothing extra (same ~40 ms per frame).
 
 See ARCHITECTURE.md "Coordinate conventions" for the mirror/handedness
 contract this implements.
@@ -18,35 +23,48 @@ from zerohero.config import CameraConfig
 from zerohero.events import Frame, Hand, Landmark, Side
 
 
-def _map_side(label: str, mirror: bool) -> Side:
-    """Map a MediaPipe handedness label to the user's actual side.
-
-    MediaPipe's handedness assumes a selfie-style (mirrored) camera. When
-    `mirror` is True the frame has already been flipped to match that
-    assumption, so the label is correct as-is. When it's False the frame
-    fed to MediaPipe is the raw, un-mirrored camera image, which is the
-    opposite of what the label assumes, so left/right must be swapped.
-    """
-    side = label.lower()
-    if side not in ("left", "right"):
-        side = "right"
-    if not mirror:
-        side = "left" if side == "right" else "right"
-    return side  # type: ignore[return-value]
+def _palm_x(hand: Hand) -> float:
+    return sum(hand.landmarks[i].x for i in (0, 5, 9, 13, 17)) / 5
 
 
 class HandTracker:
     def __init__(self, model_path: str | Path, cfg: CameraConfig) -> None:
         self.cfg = cfg
-        options = mp_vision.HandLandmarkerOptions(
+        options = mp_vision.GestureRecognizerOptions(
             base_options=BaseOptions(model_asset_path=str(model_path)),
             running_mode=mp_vision.RunningMode.VIDEO,
             num_hands=cfg.max_hands,
             min_hand_detection_confidence=cfg.min_detection_confidence,
             min_tracking_confidence=cfg.min_tracking_confidence,
         )
-        self._landmarker = mp_vision.HandLandmarker.create_from_options(options)
+        self._landmarker = mp_vision.GestureRecognizer.create_from_options(options)
         self._last_ms = -1
+        self._last_palms: list[tuple[Side, float]] = []
+
+    def _assign_sides(self, hands: list[Hand]) -> None:
+        """Sides by position, not by the model's label.
+
+        MediaPipe's Left/Right is the chirality of the 2D projection, so it
+        flips when the user shows the back of the hand instead of the palm,
+        which happens constantly while strumming or conducting. In the mirror
+        view the user's left hand is the one further left, so with two hands
+        the smaller x is "left". With one hand, keep whatever side that hand
+        had last frame (nearest previous palm), else split at the centre.
+        """
+        palms = [_palm_x(h) for h in hands]
+        if len(hands) >= 2:
+            order = sorted(range(len(hands)), key=lambda i: palms[i])
+            for rank, i in enumerate(order):
+                hands[i].side = "left" if rank == 0 else "right"
+        elif len(hands) == 1:
+            x = palms[0]
+            side: Side | None = None
+            if self._last_palms:
+                prev_side, prev_x = min(self._last_palms, key=lambda p: abs(p[1] - x))
+                if abs(prev_x - x) < 0.25:
+                    side = prev_side
+            hands[0].side = side or ("left" if x < 0.5 else "right")
+        self._last_palms = [(h.side, palms[i]) for i, h in enumerate(hands)]
 
     def process(self, bgr: np.ndarray, t: float) -> Frame:
         image = cv2.flip(bgr, 1) if self.cfg.mirror else bgr
@@ -60,18 +78,31 @@ class HandTracker:
         # replay files can carry duplicate/out-of-order t). Clamp forward.
         ms = max(self._last_ms + 1, int(t * 1000))
         self._last_ms = ms
-        result = self._landmarker.detect_for_video(mp_image, ms)
+        result = self._landmarker.recognize_for_video(mp_image, ms)
 
         world_lists = result.hand_world_landmarks or []
         hands: list[Hand] = []
+        gestures = result.gestures or []
         for i, lm_list in enumerate(result.hand_landmarks):
             category = result.handedness[i][0]
-            side = _map_side(category.category_name, self.cfg.mirror)
             landmarks = [Landmark(p.x, p.y, p.z) for p in lm_list]
             world = None
             if i < len(world_lists) and world_lists[i]:
                 world = [Landmark(p.x, p.y, p.z) for p in world_lists[i]]
-            hands.append(Hand(side=side, score=category.score, landmarks=landmarks, world=world))
+            gesture, gscore = "None", 0.0
+            if i < len(gestures) and gestures[i]:
+                gesture, gscore = gestures[i][0].category_name, float(gestures[i][0].score)
+            hands.append(
+                Hand(
+                    side="right",
+                    score=category.score,
+                    landmarks=landmarks,
+                    world=world,
+                    gesture=gesture,
+                    gesture_score=gscore,
+                )
+            )
+        self._assign_sides(hands)
 
         height, width = image.shape[:2]
         return Frame(t=t, width=width, height=height, hands=hands, image=image)
