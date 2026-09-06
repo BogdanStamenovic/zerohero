@@ -85,8 +85,15 @@ class HandTrack:
             # (the thumb moves sideways). Curling and uncurling flip its sign.
             step = sum(b[1] - a[1] for a, b in pairs[1:]) / (len(pairs) - 1)
             beta = 0.6
-            self.finger_activity = beta * self.finger_activity + (1 - beta) * moved / dt
-            self.tip_steps.append((t, step))
+            if abs(step) > 1.0:
+                # Fingertips do not move a whole hand width in one frame: the
+                # tracker re-fitted the hand. Forget the recent steps so the
+                # glitch cannot count as a reversal.
+                self.tip_steps.clear()
+                self.finger_activity = 0.0
+            else:
+                self.finger_activity = beta * self.finger_activity + (1 - beta) * moved / dt
+                self.tip_steps.append((t, step))
             while self.tip_steps and t - self.tip_steps[0][0] > 0.5:
                 self.tip_steps.popleft()
         else:
