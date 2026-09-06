@@ -24,7 +24,8 @@ __all__ = ["FrameSource", "CameraSource", "ReplaySource", "open_source"]
 class FrameSource(Protocol):
     def frames(self) -> Iterator[Frame]: ...
     def close(self) -> None: ...
-    fps: float
+    @property
+    def fps(self) -> float: ...
 
 
 class CameraSource:

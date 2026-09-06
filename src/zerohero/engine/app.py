@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from zerohero.config import CH_GUITAR, CH_PIANO, Config
 from zerohero.engine.guitar_mode import GuitarMode
@@ -11,6 +12,11 @@ from zerohero.engine.piano_mode import PianoMode
 from zerohero.engine.session import Session
 from zerohero.gestures.pipeline import GesturePipeline
 from zerohero.synth import Scheduler, open_synth
+
+if TYPE_CHECKING:
+    from zerohero.ui.view import View
+    from zerohero.vision.replay import FrameRecorder
+    from zerohero.vision.source import FrameSource
 
 log = logging.getLogger(__name__)
 
@@ -24,11 +30,11 @@ class App:
         self.pipeline = GesturePipeline(cfg)
         self.lead = None
         self.follower = None
-        self.recorder = None
-        self.view = None
+        self.recorder: FrameRecorder | None = None
+        self.view: View | None = None
         self.last_event = ""
         self.last_event_t = 0.0
-        self.source = None
+        self.source: FrameSource | None = None
         self.mode: GuitarMode | PianoMode
 
         if cfg.lead:
@@ -74,6 +80,7 @@ class App:
             self.close()
 
     def _loop(self) -> None:
+        assert self.source is not None
         loop_t = time.monotonic()
         fps = 0.0
         for frame in self.source.frames():
@@ -102,7 +109,8 @@ class App:
     def _draw(self, frame, fps: float) -> str | None:
         from zerohero.ui.overlay import OverlayState
 
-        tracks = {}
+        assert self.view is not None
+        tracks: dict[str, tuple[float, float, float, float, bool]] = {}
         for side, tr in self.pipeline.tracks.items():
             if tr.present:
                 tracks[side] = (tr.palm[0], tr.palm[1], tr.velocity[0], tr.velocity[1], self.pipeline.closed(side))

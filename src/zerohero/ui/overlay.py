@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 from zerohero.config import Config
-from zerohero.events import Frame, Side
+from zerohero.events import Frame
 
 # 21-point hand skeleton, wrist (0) rooted. MediaPipe's own `solutions` module
 # (which used to export this) isn't part of the tasks API used here, so the
@@ -80,7 +80,7 @@ class Overlay:
             cv2.circle(image, p, radius, color, fill, cv2.LINE_AA)
 
     def _draw_velocity_arrow(
-        self, image: np.ndarray, side: Side, px: float, py: float, vx: float, vy: float, w: int, h: int
+        self, image: np.ndarray, side: str, px: float, py: float, vx: float, vy: float, w: int, h: int
     ) -> None:
         color = _COLOR.get(side, _DEFAULT_COLOR)
         origin = (int(px * w), int(py * h))

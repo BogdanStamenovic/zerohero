@@ -1,4 +1,5 @@
 import socket
+import threading
 import time
 
 from zerohero.config import LinkConfig
@@ -177,3 +178,39 @@ def test_two_followers_receive_broadcast():
         f1.stop()
         f2.stop()
         lead.stop()
+
+
+def test_stop_immediately_after_connect_never_hangs():
+    """Regression: a connection whose TCP handshake completes right as stop()
+    runs can be accept()-ed *after* stop() already snapshotted and Bye'd the
+    connection list. If that straggler got registered anyway it would never
+    receive a Bye or a close, hanging both the lead's reader thread and the
+    follower's read loop forever. Hammer the connect/stop boundary to catch
+    that race; runs the check in a thread with its own timeout so a
+    regression fails fast instead of hanging the whole suite.
+    """
+
+    def hammer():
+        for _ in range(25):
+            lead = _make_lead()
+            follower = _make_follower(lead)
+            follower.start()
+            assert _wait_until(lambda f=follower: f.connected, timeout=2.0)
+            lead.stop()  # racing the lead's accept thread by design
+            assert _wait_until(lambda f=follower: not f.connected, timeout=2.0)
+            follower.stop()
+
+    result: list[BaseException] = []
+
+    def run():
+        try:
+            hammer()
+        except BaseException as e:  # noqa: BLE001 - reported to the test thread below
+            result.append(e)
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout=4.5)
+    assert not t.is_alive(), "hammer loop hung - the accept/stop race regressed"
+    if result:
+        raise result[0]

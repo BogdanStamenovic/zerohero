@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from zerohero.config import CH_GUITAR, Config
 from zerohero.engine.session import Session
-from zerohero.events import Beat, FistClose, FistOpen, GestureEvent, Strum
+from zerohero.events import Beat, FistClose, FistOpen, GestureEvent, Strum, StrumDirection
 from zerohero.music import guitar
 from zerohero.synth import Scheduler
 
@@ -37,7 +37,7 @@ class GuitarMode:
         elif isinstance(ev, (FistOpen, Beat)):
             pass
 
-    def strum(self, direction: str, intensity: float) -> None:
+    def strum(self, direction: StrumDirection, intensity: float) -> None:
         chord = self.session.current
         # A new strum cuts the ringing strings, like a real pick hand damping them.
         self.scheduler.cut(CH_GUITAR)

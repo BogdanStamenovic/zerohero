@@ -151,7 +151,7 @@ def run_calibrate(cfg: Config) -> int:
                     f"{frame.t:10.3f} hands: " + ("; ".join(parts) if parts else "none") + f" vibe={pipeline.vibe:.2f}"
                 )
             if view is not None:
-                tracks = {
+                tracks: dict[str, tuple[float, float, float, float, bool]] = {
                     s: (tr.palm[0], tr.palm[1], tr.velocity[0], tr.velocity[1], pipeline.closed(s))
                     for s, tr in pipeline.tracks.items()
                     if tr.present

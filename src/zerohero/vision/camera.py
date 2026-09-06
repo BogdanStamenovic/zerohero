@@ -43,10 +43,10 @@ class Camera:
         cap = cv2.VideoCapture(self.cfg.index, backend)
         if not cap.isOpened():
             raise CameraError(
-                f"could not open camera index {self.cfg.index} (V4L2 backend). "
-                f"Check that /dev/video{self.cfg.index} exists and no other process holds it."
+                f"could not open camera index {self.cfg.index}. "
+                f"Check that the camera exists (Linux: /dev/video{self.cfg.index}) and no other process holds it."
             )
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # type: ignore[attr-defined]
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cfg.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cfg.height)
         cap.set(cv2.CAP_PROP_FPS, self.cfg.fps)
